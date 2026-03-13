@@ -19,3 +19,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/health")
+async def health_check():
+    return{
+        "status": "ok",
+        "message": "AdCraft AI is running",
+        "python_version":"3.11.9",
+        "environment": os.getenv("NODE_ENV", "development")
+    }
+
+@app.get("/")
+async def root():
+    return{
+        "message": "Welcome to AdCraft AI API",
+        "docs": "http://localhost:8000/docs"
+    }
