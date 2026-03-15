@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os 
 
+from routers.scrape import router as scrape_router
+
 load_dotenv()
 
 
@@ -20,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(scrape_router)
 
 @app.get("/api/health")
 async def health_check():
