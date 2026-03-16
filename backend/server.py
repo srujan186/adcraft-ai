@@ -1,12 +1,20 @@
+# server.py
+import sys
+import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os 
+import os
 
-from routers.scrape import router as scrape_router
+# Import ALL routers
+from routers.scrape   import router as scrape_router
+from routers.generate import router as generate_router    # ← NEW
 
 load_dotenv()
-
 
 app = FastAPI(
     title="AdCraft AI",
@@ -22,20 +30,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register routers
 app.include_router(scrape_router)
+app.include_router(generate_router)    # ← NEW
 
 @app.get("/api/health")
 async def health_check():
-    return{
-        "status": "ok",
-        "message": "AdCraft AI is running",
-        "python_version":"3.11.9",
-        "environment": os.getenv("NODE_ENV", "development")
+    return {
+        "status":  "ok",
+        "message": "AdCraft AI is running 🚀"
     }
 
 @app.get("/")
 async def root():
-    return{
+    return {
         "message": "Welcome to AdCraft AI API",
-        "docs": "http://localhost:8000/docs"
+        "docs":    "http://localhost:8000/docs"
     }

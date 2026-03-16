@@ -569,15 +569,24 @@ def extract_colors(soup, base_url: str = "", html: str = "") -> dict:
 
         if len(unique_colors) >= 1:
             colors['primary'] = unique_colors[0]['color']
+
         if len(unique_colors) >= 2:
             colors['accent'] = unique_colors[1]['color']
 
-        # Secondary = lightest color found
-        light_colors = [c for c in unique_colors if is_light_color(c['color'])]
+        # Secondary should be WHITE or very light neutral
+        # NOT the same as primary
+        # We only override white if we found a genuinely
+        # different light color
+        light_colors = [
+            c for c in unique_colors
+            if is_light_color(c['color'])
+            and c['color'] != colors['primary']  # ← must be different from primary
+            and c['color'] != colors['accent']   # ← must be different from accent
+        ]
         if light_colors:
             colors['secondary'] = light_colors[0]['color']
 
-    return colors
+        return colors
 
 
 def extract_features(soup) -> list:
