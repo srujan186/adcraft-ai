@@ -586,7 +586,7 @@ def extract_colors(soup, base_url: str = "", html: str = "") -> dict:
         if light_colors:
             colors['secondary'] = light_colors[0]['color']
 
-        return colors
+    return colors
 
 
 def extract_features(soup) -> list:
@@ -767,6 +767,12 @@ async def scrape_with_httpx(url: str) -> dict:
         raise Exception(
             f"Too little HTML ({len(html)} chars) — JS-only or bot detection"
         )
+    
+    print(f"  📄 httpx got {len(html)} chars")
+    result = parse_html(html, url)
+    print(f"  📄 parse_html returned: {type(result)}")
+    print(f"  📄 colors type: {type(result.get('colors'))}")
+    return result
 
     return parse_html(html, url)
 
