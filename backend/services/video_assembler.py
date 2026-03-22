@@ -402,17 +402,6 @@ async def capture_website_screenshots(
     return paths
 
 
-    # ── Step 4: Assemble with FFmpeg ──────────────────
-    print("\n Step 4: Assembling video with FFmpeg...")
-
-    with ThreadPoolExecutor() as pool:
-        await loop.run_in_executor(
-            pool, assemble_with_ffmpeg,
-            bg_path, overlay_path, headline_path,
-            subtext_path, cta_path, actual_logo_path,
-            output_path, duration,
-            audio_path    # ← pass audio path
-        )
 # ═══════════════════════════════════════════════════════
 # SECTION 4 — FFMPEG VIDEO BUILDERS
 # ═══════════════════════════════════════════════════════
@@ -567,11 +556,11 @@ def mix_audio(
         "-filter_complex",
         (
             "[0:a]volume=1.0[voice];"      # voiceover at full volume
-            "[1:a]volume=0.15[music];"     # music at 15% volume
+            "[1:a]volume=1.0[music];"      # music already at 15% from prepare_music — keep as-is
             "[voice][music]amix="          # mix both together
             "inputs=2:"
-            "duration=first:"              # use voiceover length
-            "dropout_transition=2"         # smooth dropout
+            "duration=longest:"            # use longest input (music = full ad duration)
+            "dropout_transition=2"         # smooth dropout at end
             "[mixed]"
         ),
         "-map", "[mixed]",
@@ -614,6 +603,7 @@ def assemble_with_ffmpeg(
     [3] subtext
     [4] CTA button
     [5] logo (optional)
+    [6 or 5] audio (if present)
     """
     inputs = [
         "-i", bg_video_path,
@@ -623,7 +613,7 @@ def assemble_with_ffmpeg(
         "-i", cta_path,
     ]
 
-    has_logo = logo_path and os.path.exists(logo_path)
+    has_logo  = logo_path  and os.path.exists(logo_path)
     has_audio = audio_path and os.path.exists(audio_path)
 
     if has_logo:
@@ -640,6 +630,7 @@ def assemble_with_ffmpeg(
             "[with_subtext][4:v]overlay=0:520[with_cta];"
             "[with_cta][5:v]overlay=(W-w)/2:30[final]"
         )
+        audio_index = 6
     else:
         filter_complex = (
             "[0:v]scale=1280:720,setsar=1[bg];"
@@ -648,10 +639,6 @@ def assemble_with_ffmpeg(
             "[with_headline][3:v]overlay=0:360[with_subtext];"
             "[with_subtext][4:v]overlay=0:520[final]"
         )
-
-    if has_logo:
-        audio_index = 6
-    else:
         audio_index = 5
 
     command = [
@@ -659,31 +646,20 @@ def assemble_with_ffmpeg(
         *inputs,
         "-filter_complex", filter_complex,
         "-map", "[final]",
-        "-t", str(duration),
         "-c:v", "libx264",
         "-preset", "fast",
         "-crf", "23",
         "-pix_fmt", "yuv420p",
-        "-an",
-        output_path
+        "-t", str(duration),
     ]
-
 
     if has_audio:
-        command += ["-map" , f"{audio_index}:a"]
-        command += ["-c:a","aac", "-b:a", "128k"]
+        command += ["-map", f"{audio_index}:a", "-c:a", "aac", "-b:a", "128k"]
+        print(f"  🔊 Audio will be stitched from: {audio_path}")
     else:
         command += ["-an"]
-    
-    command += [
-        "-t", str(duration),
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-pix_fmt", "yuv420p",
-        output_path
-    ]
 
+    command += [output_path]
 
     run_ffmpeg(command)
     print(f"  ✅ Video assembled: {output_path}")
@@ -793,13 +769,13 @@ async def assemble_video(
         )
 
     # ── Step 2: Download logo ─────────────────────────
-    print("\n🖼️  Step 2: Downloading logo...")
+    print("\n Step 2: Downloading logo...")
     actual_logo_path = ""
     if logo_url:
         actual_logo_path = await download_logo(logo_url, logo_path)
 
     # ── Step 3: Create visual layers ─────────────────
-    print("\n🎨 Step 3: Creating visual layers...")
+    print("\n Step 3: Creating visual layers...")
 
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor() as pool:
@@ -841,24 +817,16 @@ async def assemble_video(
         music_style    = script.get("music_style", "upbeat")
 
         if voiceover_text:
-            # Generate speech
+            # Generate speech at natural Kokoro pace (no speed adjustment)
+            # The LLM writes a short enough script so no stretching is needed.
             await generate_voiceover(
                 text=voiceover_text,
                 output_path=voiceover_wav
             )
 
-            # Convert WAV to MP3
+            # Convert WAV → MP3 (no atempo, preserves pitch perfectly)
             wav_to_mp3(voiceover_wav, voiceover_mp3)
-
-            # Adjust speed to fit ad duration
-            voiceover_final = os.path.join(
-                TEMP_DIR, f"{render_id}_voice_final.mp3"
-            )
-            adjust_voiceover_speed(
-                voiceover_mp3,
-                voiceover_final,
-                float(duration)
-            )
+            voiceover_final = voiceover_mp3  # use as-is at natural speed
 
             # Get and prepare music
             raw_music_path = get_music_path(music_style)
@@ -876,25 +844,26 @@ async def assemble_video(
                 output_path=final_audio,
                 duration=duration
             )
-            print(f"  ✅ Audio ready: {audio_path}")
+            print(f"   Audio ready: {audio_path}")
         else:
-            print("  ⚠️  No voiceover text — skipping audio")
+            print("    No voiceover text — skipping audio")
 
     except Exception as e:
         import traceback
-        print(f"\n  ❌ AUDIO FAILED: {e}")
+        print(f"\n   AUDIO FAILED: {e}")
         traceback.print_exc()
         audio_path = ""
 
     # ── Step 4: Assemble with FFmpeg ──────────────────
     print("\n🎬 Step 4: Assembling video with FFmpeg...")
+    print(f"  DEBUG: audio_path passed = '{audio_path}'")
 
     with ThreadPoolExecutor() as pool:
         await loop.run_in_executor(
             pool, assemble_with_ffmpeg,
             bg_path, overlay_path, headline_path,
             subtext_path, cta_path, actual_logo_path,
-            output_path, duration
+            output_path, duration, audio_path
         )
 
     # ── Step 5: Cleanup temp files ────────────────────

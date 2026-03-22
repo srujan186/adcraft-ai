@@ -57,52 +57,83 @@ def build_prompt(
     without it, AI returns prose we can't parse.
     """
 
-    style_desc =STYLE_DESCRIPTIONS.get(
+    style_desc = STYLE_DESCRIPTIONS.get(
         ad_style,
         STYLE_DESCRIPTIONS["modern"]
     )
 
-    # Calculate voiceover word count
-    # Average speaking pace = 2.5 words per second
-    # We use 2.3 to leave breathing room
-    max_words    = int(duration * 2.3)
-    min_words    = int(duration * 1.8)
+    # Word count target
+    # Kokoro is synthesized at speed=1.3x (set in tts.py).
+    # At 1.3x, effective rate ≈ 2.6 words/sec.
+    # Target ~40 words for 15s | ~80 words for 30s — fills 4 proper sentences.
+    target_words = int(duration * 2.7)   # ideal centre (40 for 15s, 81 for 30s)
+    min_words    = int(duration * 2.5)   # absolute minimum (37 for 15s)
+    max_words    = int(duration * 3.0)   # hard ceiling (45 for 15s)
 
-    prompt = f"""You are an award-winning advertising copywriter.
-Your ads are concise, emotionally compelling, and drive action.
+    prompt = f"""You are a senior creative director at a world-class ad agency.
+You have written campaigns for Apple, Nike, Airbnb, and Coca-Cola.
+Your voiceovers sound like REAL TV and YouTube ads — never robotic, never generic.
 
-BUSINESS INFORMATION:
+BUSINESS:
 - Name: {business_name}
 - Description: {description}
-- Tagline: {tagline or "Not provided"}
+- Tagline: {tagline or "None"}
 - Ad Style: {ad_style} — {style_desc}
 - Ad Duration: {duration} seconds
 
 YOUR TASK:
-Write a {duration}-second video advertisement for {business_name}.
+Write a complete {duration}-second video ad script for {business_name}.
 
-STRICT RULES:
-1. Headline: maximum 8 words, must be memorable and punchy
-2. Subtext: maximum 15 words, explains the value clearly
-3. CTA: maximum 4 words, strong action verb (e.g. "Start Free Today")
-4. Voiceover: MUST be between {min_words} and {max_words} words
-   Natural conversational speech, not formal or robotic
-5. Music: choose ONE from: upbeat, calm, corporate, dramatic, inspirational
-6. Scene: describe 2-3 visual scenes for video background (one sentence each)
-7. Color mood: choose ONE from: vibrant, dark, light, warm, cool
-8. Key message: ONE sentence — the single thing viewers must remember
+━━━ VOICEOVER — MOST IMPORTANT FIELD ━━━
+The voiceover MUST be between {min_words} and {max_words} words. Ideal: {target_words} words.
+
+⚠️  CRITICAL: the script must END NATURALLY and feel COMPLETE within the word limit.
+- The final line must be a clean brand landing or CTA — not a trailing thought.
+- Do NOT write more than {max_words} words or the audio will be cut off mid-sentence.
+- Every word must earn its place. No padding. No filler.
+
+STRUCTURE — write EXACTLY 4 complete sentences (not fragments):
+1. HOOK sentence (8-10 words) — open with a relatable problem or bold claim
+2. CONTEXT sentence (10-12 words) — explain what {business_name} does and who it's for
+3. BENEFIT sentence (10-12 words) — the key result, outcome, or unique advantage it delivers
+4. LAND sentence (6-8 words) — brand name + strong call to action
+
+HOW REAL ADS SOUND — match this quality:
+✅ TARGET (~40 words, 4 sentences):
+"Running a business is hard enough. {business_name} gives you the tools, the insights, and the support to grow — without the guesswork. Thousands of businesses already trust us to get it done. Start your free trial today."
+
+✅ ANOTHER EXAMPLE (~38 words):
+"Your customers expect more. {business_name} helps you deliver faster service, smarter workflows, and a better experience — every single time. Built for teams that refuse to settle. Join us and see the difference."
+
+❌ BAD (fragments, too short, no real info):
+"You fast but motion go faster. Try it free now!" — This is NOT acceptable.
+
+- Each sentence must be a complete thought, not a one-word fragment.
+- Include real detail about what the brand does, not generic puffery.
+- Mention the brand name exactly once, in sentence 4.
+- No filler: "In today's world", "Look no further", "A wide range of solutions"
+
+━━━ OTHER FIELDS ━━━
+Headline: max 8 words, punchy and memorable
+Subtext: max 15 words, one clear value statement
+CTA: max 4 words, strong verb + outcome (e.g. "Start Free Today")
+Music: choose ONE that fits the tone: upbeat, calm, corporate, dramatic, inspirational
+Scene: 2-3 vivid visual scenes for the video background (one sentence each)
+Color mood: ONE of: vibrant, dark, light, warm, cool
+Key message: ONE sentence — the single idea viewers must remember
 
 RETURN ONLY THIS JSON — no markdown, no explanation, nothing else:
 {{
-    "headline":          "your headline here",
-    "subtext":           "your subtext here",
-    "cta":               "your cta here",
-    "voiceover":         "your full voiceover script here",
+    "headline":          "...",
+    "subtext":           "...",
+    "cta":               "...",
+    "voiceover":         "...",
     "music_style":       "upbeat",
     "scene_description": "Scene 1: ... Scene 2: ... Scene 3: ...",
     "color_mood":        "vibrant",
-    "key_message":       "your key message here"
+    "key_message":       "..."
 }}"""
+
     
     return prompt
 
@@ -272,12 +303,14 @@ async def generate_ad_script(
             model=MODEL,
             messages=[
                 {
-                    "role":    "system",
+                    "role": "system",
                     "content": (
-                        "You are an expert advertising copywriter. "
-                        "You always return valid JSON only. "
-                        "Never include markdown, explanations, or "
-                        "any text outside the JSON object."
+                        "You are a world-class advertising creative director with 20 years of experience "
+                        "writing TV commercials, YouTube pre-rolls, and digital video ads for global brands. "
+                        "Your scripts are emotionally resonant, brand-specific, and sound like REAL ads — "
+                        "not generic marketing copy. "
+                        "You always return valid JSON only. Never include markdown, explanations, "
+                        "or any text outside the JSON object."
                     )
                 },
                 {
@@ -285,15 +318,8 @@ async def generate_ad_script(
                     "content": prompt
                 }
             ],
-            temperature=0.7,
-                        # temperature controls creativity:
-            # 0.0 = very predictable, always same answer
-            # 0.7 = balanced (creative but focused)
-            # 1.0 = very creative but sometimes random
-
-            max_tokens=1000,
-            # max_tokens limits response length
-            # 1000 is enough for our JSON script
+            temperature=0.75,
+            max_tokens=1200,
         )
 
 

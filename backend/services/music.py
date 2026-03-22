@@ -9,46 +9,71 @@ MUSIC_DIR = os.path.join(BASE_DIR, "music")
 # SECTION 1 — MUSIC SELECTION
 # ═══════════════════════════════════════════════════════
 
-# Maps music style to filename
-MUSIC_FILES = {
-    "upbeat":        "upbeat.mp3",
-    "calm":          "calm.mp3",
-    "corporate":     "corporate.mp3",
-    "dramatic":      "dramatic.mp3",
-    "inspirational": "inspirational.mp3",
+# Style keywords matched against filenames in the music/ folder.
+# A file is used if its lowercase name contains the keyword.
+# e.g. "nastelbom-upbeat-501716.mp3" matches "upbeat"
+STYLE_KEYWORDS = {
+    "upbeat":        "upbeat",
+    "calm":          "calm",
+    "corporate":     "corporate",
+    "dramatic":      "dramatic",
+    "inspirational": "inspirational",
 }
 
-# Fallback order if a file is missing
+# Fallback priority order if requested style has no matching file
 FALLBACK_ORDER = ["upbeat", "corporate", "calm", "inspirational", "dramatic"]
+
+
+def _find_file_by_keyword(keyword: str) -> str:
+    """
+    Scans the music/ folder for any MP3 whose filename contains `keyword`.
+    Returns the full path if found, empty string otherwise.
+    Works with any download-named files — no renaming needed.
+    """
+    if not os.path.isdir(MUSIC_DIR):
+        return ""
+    for filename in os.listdir(MUSIC_DIR):
+        if keyword.lower() in filename.lower() and filename.lower().endswith(".mp3"):
+            full_path = os.path.join(MUSIC_DIR, filename)
+            print(f"  🎵 Music matched '{keyword}' → {filename}")
+            return full_path
+    return ""
 
 
 def get_music_path(music_style: str) -> str:
     """
-    Returns path to music file for given style.
-    Falls back to other styles if requested file missing.
-    Returns empty string if NO music files exist at all.
-    """
-    # Try requested style first
-    if music_style in MUSIC_FILES:
-        path = os.path.join(MUSIC_DIR, MUSIC_FILES[music_style])
-        if os.path.exists(path):
-            print(f" Music selected: {music_style} ({path})")
-            return path
-        else:
-            print(f" Music file missing: {MUSIC_FILES[music_style]}")
+    Returns path to a music file matching the requested style.
 
-    # Try fallbacks
+    How style is chosen:
+    - The LLM picks one of: upbeat, calm, corporate, dramatic, inspirational
+      based on the ad's tone and brand personality (see script_generator.py).
+    - We scan the music/ folder for any MP3 filename containing that keyword.
+    - If no match, we try the fallback order until we find something.
+    - If still nothing, we skip music entirely (voice-only output).
+
+    This means you can drop any named MP3 into backend/music/ and it will
+    be picked up automatically as long as the style keyword is in the filename.
+    """
+    # Try the requested style first
+    keyword = STYLE_KEYWORDS.get(music_style, music_style)
+    path = _find_file_by_keyword(keyword)
+    if path:
+        return path
+
+    print(f"  ⚠️  No music file found for style: '{music_style}' — trying fallbacks")
+
+    # Try fallbacks in priority order
     for fallback in FALLBACK_ORDER:
         if fallback == music_style:
             continue
-        path = os.path.join(MUSIC_DIR, MUSIC_FILES[fallback])
-        if os.path.exists(path):
-            print(f"  🎵 Using fallback music: {fallback}")
+        fallback_keyword = STYLE_KEYWORDS.get(fallback, fallback)
+        path = _find_file_by_keyword(fallback_keyword)
+        if path:
+            print(f"  🎵 Using fallback style: {fallback}")
             return path
 
-    # No music files at all
-    print("  No music files found in music/ folder")
-    print("  Add MP3 files to backend/music/ folder")
+    # Nothing at all in the folder
+    print("  ⚠️  No music files found in backend/music/ — skipping music")
     return ""
 
 

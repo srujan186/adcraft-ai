@@ -44,14 +44,20 @@ VOICES = {
 
 # Default voice for ads
 DEFAULT_VOICE = "af_heart"
+
+# Synthesis speed — 1.3x sounds natural and fits ~40 words into 15s.
+# This is Kokoro's native speed param (not post-processing atempo),
+# so pitch stays natural even at higher speeds.
+DEFAULT_SPEED = 1.3
+
 # SECTION 1 — CORE TTS FUNCTION
 # ═══════════════════════════════════════════════════════
 
 def generate_speech_sync(
     text:        str,
     output_path: str,
-    voice:       str = DEFAULT_VOICE,
-    speed:       float = 1.0
+    voice:       str   = DEFAULT_VOICE,
+    speed:       float = DEFAULT_SPEED
 ) -> str:
     """
     Synchronous speech generation.
@@ -88,8 +94,8 @@ def generate_speech_sync(
 async def generate_voiceover(
     text:        str,
     output_path: str,
-    voice:       str = DEFAULT_VOICE,
-    speed:       float = 1.0
+    voice:       str   = DEFAULT_VOICE,
+    speed:       float = DEFAULT_SPEED
 ) -> str:
     """
     Async wrapper for speech generation.
