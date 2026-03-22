@@ -11,6 +11,8 @@ import aiofiles
 from PIL import Image, ImageDraw, ImageFont
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
+from services.tts   import generate_voiceover, wav_to_mp3, adjust_voiceover_speed
+from services.music import get_music_path, prepare_music
 
 load_dotenv()
 
@@ -131,7 +133,7 @@ def create_overlay_image(
     rgba = hex_to_rgba(color, alpha)
     img  = Image.new("RGBA", (width, height), rgba)
     img.save(output_path, "PNG")
-    print(f"  🎨 Overlay created: {color} alpha={alpha}")
+    print(f" Overlay created: {color} alpha={alpha}")
     return output_path
 
 
@@ -172,7 +174,7 @@ def create_text_image(
 
     if font is None:
         font = ImageFont.load_default()
-        print(f"  ⚠️  Using default font")
+        print(f"Using default font")
 
     color_rgb    = hex_to_rgb(text_color)
     wrapped_text = wrap_text(text, font, draw, width - 80)
@@ -400,6 +402,17 @@ async def capture_website_screenshots(
     return paths
 
 
+    # ── Step 4: Assemble with FFmpeg ──────────────────
+    print("\n Step 4: Assembling video with FFmpeg...")
+
+    with ThreadPoolExecutor() as pool:
+        await loop.run_in_executor(
+            pool, assemble_with_ffmpeg,
+            bg_path, overlay_path, headline_path,
+            subtext_path, cta_path, actual_logo_path,
+            output_path, duration,
+            audio_path    # ← pass audio path
+        )
 # ═══════════════════════════════════════════════════════
 # SECTION 4 — FFMPEG VIDEO BUILDERS
 # ═══════════════════════════════════════════════════════
@@ -510,7 +523,72 @@ def screenshots_to_video(
     except Exception:
         pass
 
-    print(f"  ✅ Screenshot video created: {output_path}")
+    print(f"  Screenshot video created: {output_path}")
+    return output_path
+
+
+def mix_audio(
+    voiceover_path: str,
+    music_path:     str,
+    output_path:    str,
+    duration:       int
+) -> str:
+    """
+    Mixes voiceover and background music into one audio track.
+
+    Why mix separately?
+    It's cleaner to mix audio first, then add to video.
+    Gives us better control over levels.
+
+    Final mix:
+    - Voiceover: 100% volume (clearly audible)
+    - Music: 15% volume (subtle background)
+    """
+    if not voiceover_path or not os.path.exists(voiceover_path):
+        print("  No voiceover — using music only")
+        if music_path and os.path.exists(music_path):
+            import shutil
+            shutil.copy(music_path, output_path)
+            return output_path
+        return ""
+
+    if not music_path or not os.path.exists(music_path):
+        print(" No music — using voiceover only")
+        import shutil
+        shutil.copy(voiceover_path, output_path)
+        return output_path
+
+    print(" Mixing voiceover + music...")
+
+    command = [
+        "ffmpeg", "-y",
+        "-i", voiceover_path,   # input 1: voiceover
+        "-i", music_path,       # input 2: music
+        "-filter_complex",
+        (
+            "[0:a]volume=1.0[voice];"      # voiceover at full volume
+            "[1:a]volume=0.15[music];"     # music at 15% volume
+            "[voice][music]amix="          # mix both together
+            "inputs=2:"
+            "duration=first:"              # use voiceover length
+            "dropout_transition=2"         # smooth dropout
+            "[mixed]"
+        ),
+        "-map", "[mixed]",
+        "-t", str(duration),
+        "-acodec", "libmp3lame",
+        "-q:a", "2",
+        output_path
+    ]
+
+    result = subprocess.run(command, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print(f"  Audio mix failed — using voiceover only")
+        import shutil
+        shutil.copy(voiceover_path, output_path)
+
+    print(" Audio mixed successfully")
     return output_path
 
 
@@ -522,7 +600,8 @@ def assemble_with_ffmpeg(
     cta_path:      str,
     logo_path:     str,
     output_path:   str,
-    duration:      int
+    duration:      int,
+    audio_path:    str = ""
 ) -> str:
     """
     Combines all PNG layers + background video into final MP4.
@@ -545,8 +624,12 @@ def assemble_with_ffmpeg(
     ]
 
     has_logo = logo_path and os.path.exists(logo_path)
+    has_audio = audio_path and os.path.exists(audio_path)
+
     if has_logo:
         inputs += ["-i", logo_path]
+    if has_audio:
+        inputs += ["-i", audio_path]
 
     if has_logo:
         filter_complex = (
@@ -566,6 +649,11 @@ def assemble_with_ffmpeg(
             "[with_subtext][4:v]overlay=0:520[final]"
         )
 
+    if has_logo:
+        audio_index = 6
+    else:
+        audio_index = 5
+
     command = [
         "ffmpeg", "-y",
         *inputs,
@@ -579,6 +667,23 @@ def assemble_with_ffmpeg(
         "-an",
         output_path
     ]
+
+
+    if has_audio:
+        command += ["-map" , f"{audio_index}:a"]
+        command += ["-c:a","aac", "-b:a", "128k"]
+    else:
+        command += ["-an"]
+    
+    command += [
+        "-t", str(duration),
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        output_path
+    ]
+
 
     run_ffmpeg(command)
     print(f"  ✅ Video assembled: {output_path}")
@@ -721,6 +826,65 @@ async def assemble_video(
             cta, VIDEO_WIDTH, 100,
             primary_color, "#ffffff", cta_path
         )
+    # ── Step 3.5: Generate audio ──────────────────────
+    print("\n🔊 Step 3.5: Generating audio...")
+    print(f"  DEBUG: voiceover = {script.get('voiceover', 'MISSING')[:50]}")
+
+    voiceover_wav  = os.path.join(TEMP_DIR, f"{render_id}_voice.wav")
+    voiceover_mp3  = os.path.join(TEMP_DIR, f"{render_id}_voice.mp3")
+    music_prepared = os.path.join(TEMP_DIR, f"{render_id}_music.mp3")
+    final_audio    = os.path.join(TEMP_DIR, f"{render_id}_audio.mp3")
+    audio_path     = ""
+
+    try:
+        voiceover_text = script.get("voiceover", "")
+        music_style    = script.get("music_style", "upbeat")
+
+        if voiceover_text:
+            # Generate speech
+            await generate_voiceover(
+                text=voiceover_text,
+                output_path=voiceover_wav
+            )
+
+            # Convert WAV to MP3
+            wav_to_mp3(voiceover_wav, voiceover_mp3)
+
+            # Adjust speed to fit ad duration
+            voiceover_final = os.path.join(
+                TEMP_DIR, f"{render_id}_voice_final.mp3"
+            )
+            adjust_voiceover_speed(
+                voiceover_mp3,
+                voiceover_final,
+                float(duration)
+            )
+
+            # Get and prepare music
+            raw_music_path = get_music_path(music_style)
+            if raw_music_path:
+                prepare_music(
+                    music_path=raw_music_path,
+                    output_path=music_prepared,
+                    duration=duration
+                )
+
+            # Mix voiceover + music
+            audio_path = mix_audio(
+                voiceover_path=voiceover_final,
+                music_path=music_prepared,
+                output_path=final_audio,
+                duration=duration
+            )
+            print(f"  ✅ Audio ready: {audio_path}")
+        else:
+            print("  ⚠️  No voiceover text — skipping audio")
+
+    except Exception as e:
+        import traceback
+        print(f"\n  ❌ AUDIO FAILED: {e}")
+        traceback.print_exc()
+        audio_path = ""
 
     # ── Step 4: Assemble with FFmpeg ──────────────────
     print("\n🎬 Step 4: Assembling video with FFmpeg...")
