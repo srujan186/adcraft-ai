@@ -1,0 +1,48 @@
+services:
+  # ── Backend (FastAPI) ──────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: adcraft_backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist generated videos and temp files between deploys
+      - ./backend/output:/app/output
+      - ./backend/temp:/app/temp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Frontend (Next.js) ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # On Oracle Cloud: replace with your VM's public IP
+        NEXT_PUBLIC_API_URL: http://backend:8000
+    container_name: adcraft_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+
+  # ── Nginx reverse proxy ────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: adcraft_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
