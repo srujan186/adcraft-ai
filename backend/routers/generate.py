@@ -60,6 +60,10 @@ async def generate_from_url(request: dict):
     try:
         print(f"\n🔗 Pipeline starting for: {url}")
         scraped = await scrape_business_url(url)
+        
+        if scraped.get("scrape_failed"):
+            raise HTTPException(status_code=400, detail=scraped.get("scrape_message", "Could not scrape the provided URL."))
+
         script  = await generate_ad_script(
             business_name=scraped["business_name"],
             description=scraped["description"],
@@ -75,6 +79,8 @@ async def generate_from_url(request: dict):
                 "metadata": {"url": url, "ad_style": ad_style, "duration": duration}
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -92,6 +98,9 @@ async def generate_video(request: dict):
         # Step 1: Scrape
         print(f"\n🔗 Full video pipeline: {url}")
         scraped = await scrape_business_url(url)
+
+        if scraped.get("scrape_failed"):
+            raise HTTPException(status_code=400, detail=scraped.get("scrape_message", "Could not scrape the provided URL."))
 
         # Step 2: Generate script
         script = await generate_ad_script(
@@ -131,6 +140,8 @@ async def generate_video(request: dict):
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Video pipeline error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

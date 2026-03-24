@@ -30,6 +30,13 @@ export default function GeneratePage() {
     e.preventDefault();
     if (!url.trim()) { setError("Please enter a URL"); return; }
 
+    // Basic frontend URL validation
+    const urlPattern = /^(https?:\/\/)?([\w.-]+\.[a-z]{2,})(\/.*)?$/i;
+    if (!urlPattern.test(url.trim())) {
+      setError("URL is invalid please enter the valid url");
+      return;
+    }
+
     setError("");
     setLoading(true);
 
@@ -50,7 +57,17 @@ export default function GeneratePage() {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
       setStep(-1);
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      
+      let errorMessage = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      if (
+        errorMessage.includes("couldn't automatically read") || 
+        errorMessage.includes("Could not scrape") ||
+        errorMessage.toLowerCase().includes("url")
+      ) {
+        errorMessage = "URL is invalid please enter the valid url";
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
