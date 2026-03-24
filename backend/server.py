@@ -56,4 +56,4 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to AdCraft AI API", "docs": "/docs"}
+    return {"message": "Welcome to AdCraft AI API", "docs": "/docs"}

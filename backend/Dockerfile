@@ -23,6 +23,9 @@ COPY . .
 # Create dirs that must exist
 RUN mkdir -p output temp
 
-EXPOSE 8000
+# PORT=7860 for Hugging Face Spaces, 8000 for local/Docker Compose
+ENV PORT=7860
+EXPOSE 7860
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD uvicorn server:app --host 0.0.0.0 --port ${PORT}
+
