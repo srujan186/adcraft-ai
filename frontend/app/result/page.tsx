@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { videoFileUrl, type VideoResult, type AdScript } from "@/lib/api";
+import BottomBanner from "./BottomBanner";
 
 const SCRIPT_FIELDS: Array<{ key: keyof AdScript; label: string }> = [
   { key: "headline",          label: "Headline" },
@@ -87,6 +88,11 @@ export default function ResultPage() {
         </div>
 
         <div className="divider" />
+
+        {/* ── Bottom Banner editor ──────────────────────────────── */}
+        {scraped && <BottomBanner scraped={scraped} />}
+
+        <div className="divider" style={{ marginTop: "2rem" }} />
 
         {/* Brand info */}
         {scraped && (

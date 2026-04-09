@@ -33,7 +33,7 @@ export interface VideoResult {
 
 export type AdStyle = "modern" | "bold" | "minimal" | "playful";
 
-// ─── API Calls ────────────────────────────────────────────────────────────────
+// ─── API Calls ───────────────────────────────────────────────────────────────
 
 export async function scrapeUrl(url: string): Promise<ScrapeResult> {
   const res = await fetch(`${BASE}/api/scrape`, {
