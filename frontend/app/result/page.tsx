@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { videoFileUrl, type VideoResult, type AdScript } from "@/lib/api";
 import BottomBanner from "./BottomBanner";
+import VideoEditor from "./VideoEditor";
 
 const SCRIPT_FIELDS: Array<{ key: keyof AdScript; label: string }> = [
   { key: "headline",          label: "Headline" },
@@ -20,6 +21,7 @@ export default function ResultPage() {
   const router = useRouter();
   const [result, setResult] = useState<VideoResult | null>(null);
   const [videoSrc, setVideoSrc] = useState("");
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("adcraft_result");
@@ -41,6 +43,17 @@ export default function ResultPage() {
 
   const script = result.script;
   const scraped = result.scraped;
+
+  // ── Show the full-screen editor ─────────────────────────────────────────
+  if (editing) {
+    return (
+      <VideoEditor
+        result={result}
+        videoSrc={videoSrc}
+        onBack={() => setEditing(false)}
+      />
+    );
+  }
 
   function handleDownload() {
     const a = document.createElement("a");
@@ -81,6 +94,14 @@ export default function ResultPage() {
             onClick={handleDownload}
           >
             ⬇️ Download MP4
+          </button>
+          <button
+            id="edit-video-btn"
+            className="btn btn-secondary"
+            onClick={() => setEditing(true)}
+            style={{ borderColor: "rgba(108,99,255,0.4)", color: "var(--accent2)" }}
+          >
+            ✏️ Edit Video
           </button>
           <Link href="/generate" className="btn btn-secondary" id="create-another-btn">
             🔄 Create Another

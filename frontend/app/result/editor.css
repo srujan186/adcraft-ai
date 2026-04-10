@@ -1,0 +1,462 @@
+/* ── Video Editor Layout ───────────────────────────────────────────────────── */
+
+.ve-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #08080f;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+  animation: veFadeIn 0.25s ease both;
+}
+
+@keyframes veFadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.ve-topbar {
+  height: 54px;
+  background: #0d0d1a;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  flex-shrink: 0;
+  gap: 1rem;
+}
+
+.ve-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ve-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.7);
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-sans);
+}
+.ve-back-btn:hover {
+  border-color: rgba(255,255,255,0.25);
+  color: #fff;
+  background: rgba(255,255,255,0.05);
+}
+
+.ve-title {
+  font-family: var(--font-head);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+}
+
+.ve-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ve-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: linear-gradient(135deg, #6c63ff 0%, #8b83ff 100%);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-sans);
+  box-shadow: 0 0 20px rgba(108,99,255,0.35);
+}
+.ve-save-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 30px rgba(108,99,255,0.5);
+}
+.ve-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Body (sidebar + panel + video) ─────────────────────────────────────── */
+.ve-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── Icon sidebar ────────────────────────────────────────────────────────── */
+.ve-icon-sidebar {
+  width: 62px;
+  background: #0d0d1a;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem 0;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.ve-icon-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  transition: all 0.18s;
+  color: rgba(255,255,255,0.4);
+  font-size: 1.15rem;
+  position: relative;
+}
+.ve-icon-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.8);
+}
+.ve-icon-btn.active {
+  background: rgba(108,99,255,0.15);
+  color: #a78bfa;
+  box-shadow: inset 0 0 0 1px rgba(108,99,255,0.3);
+}
+.ve-icon-label {
+  font-size: 0.48rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1;
+  font-family: var(--font-sans);
+}
+
+/* ── Edit panel ──────────────────────────────────────────────────────────── */
+.ve-edit-panel {
+  width: 280px;
+  background: #0f0f1c;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.ve-panel-header {
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+.ve-panel-title {
+  font-family: var(--font-head);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.15rem;
+}
+.ve-panel-sub {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.35);
+}
+
+.ve-panel-body {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1;
+}
+
+/* ── Form fields inside panel ────────────────────────────────────────────── */
+.ve-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.ve-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.4);
+}
+.ve-input,
+.ve-textarea {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: #f0f0ff;
+  font-size: 0.85rem;
+  font-family: var(--font-sans);
+  padding: 0.6rem 0.8rem;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.18s, box-shadow 0.18s;
+  resize: none;
+}
+.ve-input:focus,
+.ve-textarea:focus {
+  border-color: rgba(108,99,255,0.5);
+  box-shadow: 0 0 0 3px rgba(108,99,255,0.12);
+}
+.ve-textarea { min-height: 90px; line-height: 1.5; }
+
+/* ── Music style chips ───────────────────────────────────────────────────── */
+.ve-music-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.ve-music-chip {
+  padding: 0.6rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.18s;
+}
+.ve-music-chip:hover { border-color: rgba(108,99,255,0.35); }
+.ve-music-chip.selected {
+  border-color: #6c63ff;
+  background: rgba(108,99,255,0.12);
+  box-shadow: 0 0 12px rgba(108,99,255,0.2);
+}
+.ve-chip-icon { font-size: 1.3rem; display: block; margin-bottom: 0.25rem; }
+.ve-chip-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.8);
+  font-family: var(--font-head);
+}
+.ve-chip-desc { font-size: 0.62rem; color: rgba(255,255,255,0.35); margin-top: 0.1rem; }
+
+/* ── Color swatches ──────────────────────────────────────────────────────── */
+.ve-color-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.ve-color-swatch {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: border-color 0.18s;
+}
+.ve-color-swatch:hover { border-color: rgba(255,255,255,0.3); }
+.ve-color-swatch input[type="color"] {
+  width: 100%; height: 100%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
+.ve-color-val {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.5);
+  font-family: monospace;
+}
+
+/* ── Main video area ─────────────────────────────────────────────────────── */
+.ve-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #08080f;
+}
+
+.ve-video-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow: hidden;
+}
+
+.ve-video-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 680px;
+  aspect-ratio: 16/9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 0 60px rgba(108,99,255,0.2), 0 0 0 1px rgba(108,99,255,0.2);
+}
+.ve-video-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Banner overlay on video */
+.ve-banner-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.55rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  backdrop-filter: blur(4px);
+}
+.ve-banner-company {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: #fff;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ve-banner-contacts {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.8);
+  overflow: hidden;
+}
+.ve-banner-pill {
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Timeline ────────────────────────────────────────────────────────────── */
+.ve-timeline {
+  height: 110px;
+  background: #0b0b18;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.ve-tl-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  flex-shrink: 0;
+}
+
+.ve-play-btn {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  transition: all 0.18s;
+  flex-shrink: 0;
+}
+.ve-play-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+.ve-duration-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.5);
+  font-family: monospace;
+  min-width: 36px;
+}
+
+.ve-tracks {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 1rem 0.6rem;
+  overflow: hidden;
+}
+
+.ve-track {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 18px;
+  flex-shrink: 0;
+}
+.ve-track-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  width: 90px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.ve-track-bar {
+  flex: 1;
+  height: 100%;
+  border-radius: 3px;
+  opacity: 0.85;
+  position: relative;
+  overflow: hidden;
+}
+.ve-track-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+}
+
+/* ── Panel save button ───────────────────────────────────────────────────── */
+.ve-panel-save {
+  margin-top: auto;
+  padding: 0 1.25rem 1.25rem;
+}
+.ve-apply-btn {
+  width: 100%;
+  padding: 0.65rem;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #6c63ff, #8b83ff);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.18s;
+  box-shadow: 0 0 16px rgba(108,99,255,0.3);
+}
+.ve-apply-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.ve-apply-btn.saved {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 0 16px rgba(34,197,94,0.3);
+}
