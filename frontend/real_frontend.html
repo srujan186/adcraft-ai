@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vibe — Streaming TV Advertising</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0A0C11;
+    --bg-soft: #0F131A;
+    --panel: #151A23;
+    --panel-2: #1B222D;
+    --line: rgba(255,255,255,0.08);
+    --line-strong: rgba(255,255,255,0.16);
+    --text: #F2F4F8;
+    --text-dim: #8A93A6;
+    --text-dimmer: #5B6478;
+    --signal: #5B8CFF;
+    --signal-dim: rgba(91,140,255,0.14);
+    --rec: #FF5D3A;
+    --rec-dim: rgba(255,93,58,0.14);
+    --tape: #C9FF5B;
+    --radius: 14px;
+    --display: 'Big Shoulders Display', sans-serif;
+    --body: 'Inter', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--body);
+    line-height:1.5;
+    overflow-x:hidden;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important;}
+  }
+  a{color:inherit; text-decoration:none;}
+  img{max-width:100%;display:block;}
+  .wrap{max-width:1200px; margin:0 auto; padding:0 32px;}
+  ::selection{background:var(--signal); color:#04070d;}
+
+  /* Faint scanline / noise atmosphere across whole page */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background-image: repeating-linear-gradient(to bottom, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+    pointer-events:none;
+    z-index:2;
+    mix-blend-mode:overlay;
+  }
+
+  /* ---------- NAV ---------- */
+  header{
+    position:sticky; top:0; z-index:100;
+    background:rgba(10,12,17,0.72);
+    backdrop-filter: blur(14px) saturate(140%);
+    border-bottom:1px solid var(--line);
+  }
+  .announce{
+    background:linear-gradient(90deg, #10151d, #161b24 50%, #10151d);
+    border-bottom:1px solid var(--line);
+    text-align:center;
+    font-size:13px;
+    color:var(--text-dim);
+    padding:9px 16px;
+  }
+  .announce b{color:var(--text); font-weight:600;}
+  .announce span.dot{color:var(--tape); margin:0 8px;}
+  .navbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 32px;
+    max-width:1200px; margin:0 auto;
+  }
+  .logo{
+    font-family:var(--display); font-weight:800; font-size:26px; letter-spacing:0.5px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .logo .rec{
+    width:9px; height:9px; border-radius:50%; background:var(--rec);
+    box-shadow:0 0 10px 2px var(--rec);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .navlinks{
+    display:flex; align-items:center; gap:34px;
+    font-size:14.5px; font-weight:500; color:var(--text-dim);
+  }
+  .navlinks a:hover{color:var(--text);}
+  .navcta{display:flex; align-items:center; gap:12px;}
+  .btn{
+    font-family:var(--body); font-weight:600; font-size:14.5px;
+    padding:10px 20px; border-radius:8px; border:1px solid transparent;
+    cursor:pointer; display:inline-flex; align-items:center; gap:8px;
+    transition:all .18s ease;
+  }
+  .btn-primary{ background:var(--signal); color:#04070d; }
+  .btn-primary:hover{ background:#7aa2ff; transform:translateY(-1px); }
+  .btn-ghost{ color:var(--text); border-color:var(--line-strong); }
+  .btn-ghost:hover{ border-color:var(--signal); color:var(--signal); }
+  .btn-text{ color:var(--text-dim); font-weight:600; font-size:14.5px; }
+  .btn-text:hover{color:var(--text);}
+  .menu-toggle{display:none; background:none; border:none; color:var(--text); font-size:26px; cursor:pointer;}
+
+  @media (max-width:900px){
+    .navlinks{display:none;}
+    .navcta .btn-text{display:none;}
+    .menu-toggle{display:block;}
+  }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative;
+    padding:88px 0 60px;
+    overflow:hidden;
+  }
+  .hero-glow{
+    position:absolute; top:-260px; left:50%; transform:translateX(-50%);
+    width:1100px; height:620px;
+    background:radial-gradient(ellipse at center, rgba(91,140,255,0.20), transparent 65%);
+    pointer-events:none;
+    z-index:0;
+  }
+  .hero-inner{
+    position:relative; z-index:1;
+    display:grid; grid-template-columns:1.05fr 0.95fr; gap:56px; align-items:center;
+  }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--mono); font-size:12px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--tape); background:rgba(201,255,91,0.08); border:1px solid rgba(201,255,91,0.25);
+    padding:6px 12px; border-radius:100px; margin-bottom:22px;
+  }
+  h1.headline{
+    font-family:var(--display); font-weight:800;
+    font-size:clamp(48px, 6.4vw, 88px);
+    line-height:0.95;
+    letter-spacing:-0.5px;
+    margin-bottom:22px;
+  }
+  .channel-flip{
+    display:inline-block; position:relative; color:var(--signal);
+    min-width:1ch;
+  }
+  h1.headline .stack{color:var(--text-dimmer); -webkit-text-stroke: 1px var(--text-dimmer); color:transparent;}
+  .hero p.sub{
+    font-size:19px; color:var(--text-dim); max-width:480px; margin-bottom:34px;
+  }
+  .hero-ctas{display:flex; align-items:center; gap:16px; margin-bottom:36px; flex-wrap:wrap;}
+  .btn-lg{ padding:14px 26px; font-size:15.5px; border-radius:9px; }
+  .g2row{ display:flex; align-items:center; gap:10px; font-size:14px; color:var(--text-dim);}
+  .stars{ color:var(--tape); letter-spacing:2px; font-size:14px;}
+
+  /* TV frame */
+  .tv-frame{
+    position:relative;
+    background:linear-gradient(160deg, #1c2230, #0d1017);
+    border-radius:20px;
+    border:1px solid var(--line-strong);
+    padding:14px;
+    box-shadow: 0 40px 90px -30px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02) inset;
+  }
+  .tv-screen{
+    border-radius:11px;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(91,140,255,0.35), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(255,93,58,0.25), transparent 50%),
+      #0a0d13;
+    aspect-ratio: 16/10;
+    position:relative;
+    overflow:hidden;
+    display:flex; flex-direction:column; justify-content:space-between;
+    padding:22px;
+  }
+  .tv-screen::after{
+    content:""; position:absolute; inset:0;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.05) 0px, transparent 2px, transparent 4px);
+    opacity:0.5; pointer-events:none;
+  }
+  .tv-topline{ display:flex; justify-content:space-between; align-items:flex-start; font-family:var(--mono); font-size:11.5px; color:rgba(242,244,248,0.55); position:relative; z-index:1;}
+  .tv-live{ display:flex; align-items:center; gap:6px; color:var(--rec);}
+  .tv-live .dot{ width:6px; height:6px; border-radius:50%; background:var(--rec); box-shadow:0 0 8px var(--rec);}
+  .tv-ticker{
+    position:relative; z-index:1;
+    display:flex; align-items:baseline; gap:14px; font-family:var(--mono);
+  }
+  .tv-ticker .big{ font-family:var(--display); font-size:52px; font-weight:800; color:#fff;}
+  .tv-ticker .cap{ font-size:12px; color:rgba(242,244,248,0.6); text-transform:uppercase; letter-spacing:0.08em;}
+  .tv-bars{
+    position:relative; z-index:1;
+    display:flex; gap:6px; align-items:flex-end; height:44px;
+  }
+  .tv-bars i{ flex:1; background:var(--signal); border-radius:2px 2px 0 0; opacity:0.85; }
+  .chin{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 6px 4px; font-family:var(--mono); font-size:11px; color:var(--text-dimmer);
+  }
+  .chin .dots{ display:flex; gap:6px; }
+  .chin .dots span{ width:6px; height:6px; border-radius:50%; background:#2a3140; }
+
+  /* ---------- MARQUEE (channel guide strip) ---------- */
+  .marquee-section{ border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--bg-soft); padding:22px 0; overflow:hidden;}
+  .marquee-track{ display:flex; gap:14px; width:max-content; animation:scroll 34s linear infinite; }
+  .marquee-section:hover .marquee-track{ animation-play-state:paused; }
+  @keyframes scroll{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+  .chan-badge{
+    font-family:var(--mono); font-size:13px; font-weight:500; color:var(--text-dim);
+    border:1px solid var(--line-strong); border-radius:7px;
+    padding:9px 16px; white-space:nowrap; display:flex; align-items:center; gap:8px;
+    background:var(--panel);
+  }
+  .chan-badge .num{ color:var(--signal); font-weight:600; }
+
+  /* ---------- SECTION SCAFFOLD ---------- */
+  section{ padding:100px 0; position:relative; }
+  .section-head{ max-width:640px; margin-bottom:56px; }
+  .kicker{
+    font-family:var(--mono); font-size:12.5px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--signal); margin-bottom:14px; display:flex; align-items:center; gap:10px;
+  }
+  .kicker::before{ content:""; width:22px; height:1px; background:var(--signal); }
+  h2{ font-family:var(--display); font-weight:800; font-size:clamp(34px,4vw,50px); line-height:1.02; letter-spacing:-0.3px; margin-bottom:16px;}
+  .section-head p{ color:var(--text-dim); font-size:17px; max-width:520px; }
+
+  /* Trust strip */
+  .trust{ text-align:center; padding:56px 0 0; }
+  .trust .count{ font-family:var(--display); font-weight:900; font-size:clamp(52px,7vw,96px); color:var(--text); line-height:1; }
+  .trust .count span{ color:var(--signal); }
+  .trust .label{ color:var(--text-dim); font-size:16px; margin-top:10px; }
+
+  /* Goals pills */
+  .goals{ display:flex; flex-wrap:wrap; gap:12px; }
+  .goal-pill{
+    border:1px solid var(--line-strong); border-radius:100px; padding:14px 24px;
+    display:flex; align-items:center; gap:10px; font-weight:600; font-size:14.5px;
+    background:var(--panel); transition: all .2s ease; cursor:default;
+  }
+  .goal-pill:hover{ border-color:var(--signal); background:var(--signal-dim); transform:translateY(-2px); }
+  .goal-pill .n{ font-family:var(--mono); color:var(--text-dimmer); font-size:12px; }
+
+  /* Bento features */
+  .bento{ display:grid; grid-template-columns:repeat(6,1fr); grid-auto-rows:200px; gap:18px; }
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:28px; display:flex; flex-direction:column; justify-content:flex-end;
+    position:relative; overflow:hidden; transition: border-color .2s ease, transform .2s ease;
+  }
+  .card:hover{ border-color:var(--line-strong); transform:translateY(-3px); }
+  .card .icon{
+    position:absolute; top:24px; left:28px; width:38px; height:38px; border-radius:9px;
+    background:var(--signal-dim); border:1px solid rgba(91,140,255,0.3);
+    display:flex; align-items:center; justify-content:center; color:var(--signal);
+  }
+  .card h3{ font-family:var(--display); font-weight:700; font-size:22px; margin-bottom:6px; }
+  .card p{ color:var(--text-dim); font-size:14.5px; }
+  .card.c1{ grid-column:span 3; grid-row:span 2; }
+  .card.c2{ grid-column:span 3; grid-row:span 1; }
+  .card.c3{ grid-column:span 3; grid-row:span 1; }
+  .card.c4{ grid-column:span 2; grid-row:span 1; }
+  .card.c5{ grid-column:span 2; grid-row:span 1; }
+  .card.c6{ grid-column:span 2; grid-row:span 1; }
+  @media (max-width:900px){
+    .bento{ grid-template-columns:1fr; grid-auto-rows:auto; }
+    .card{ grid-column:span 1 !important; grid-row:span 1 !important; padding:26px; min-height:160px;}
+  }
+
+  /* Testimonials */
+  .testi-row{ display:flex; gap:20px; overflow-x:auto; padding-bottom:10px; scroll-snap-type:x mandatory; }
+  .testi-row::-webkit-scrollbar{ height:6px; }
+  .testi-row::-webkit-scrollbar-thumb{ background:var(--line-strong); border-radius:10px; }
+  .testi-card{
+    min-width:360px; scroll-snap-align:start;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:28px; display:flex; flex-direction:column; gap:18px;
+  }
+  .testi-quote{ font-size:16.5px; line-height:1.5; }
+  .testi-quote::before{ content:"“"; color:var(--signal); font-family:var(--display); font-size:22px; }
+  .testi-foot{ display:flex; align-items:center; gap:12px; margin-top:auto; }
+  .avatar{ width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg, var(--signal), var(--rec)); flex-shrink:0; }
+  .testi-name{ font-weight:700; font-size:14.5px; }
+  .testi-role{ color:var(--text-dim); font-size:13px; }
+  .testi-tag{ font-family:var(--mono); font-size:11.5px; color:var(--tape); background:rgba(201,255,91,0.08); border:1px solid rgba(201,255,91,0.22); padding:4px 10px; border-radius:6px; align-self:flex-start;}
+
+  /* Success stories strip */
+  .story-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .story{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:22px; display:flex; flex-direction:column; gap:8px;
+  }
+  .story .metric{ font-family:var(--display); font-weight:800; font-size:38px; color:var(--tape); }
+  .story .desc{ color:var(--text-dim); font-size:13.5px; }
+  @media (max-width:900px){ .story-grid{ grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:560px){ .story-grid{ grid-template-columns:1fr;} }
+
+  /* G2 badges */
+  .badge-row{ display:flex; flex-wrap:wrap; gap:14px; justify-content:center; }
+  .g2badge{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    width:110px; padding:16px 10px; border:1px solid var(--line); border-radius:10px; background:var(--panel);
+  }
+  .g2badge .medal{ width:34px; height:34px; border-radius:50%; background:conic-gradient(var(--signal), var(--tape), var(--rec), var(--signal)); }
+  .g2badge span{ font-size:11px; color:var(--text-dim); text-align:center; line-height:1.3; }
+
+  /* Final CTA */
+  .cta-band{
+    background: radial-gradient(ellipse at top, rgba(91,140,255,0.16), transparent 60%), var(--panel);
+    border:1px solid var(--line-strong); border-radius:24px;
+    padding:72px 40px; text-align:center; margin:0 32px;
+  }
+  .cta-band h2{ margin-bottom:10px; }
+  .cta-band .g2row{ justify-content:center; margin-bottom:30px; }
+  .cta-btns{ display:flex; justify-content:center; gap:16px; flex-wrap:wrap; }
+
+  /* Footer */
+  footer{ padding:72px 0 40px; border-top:1px solid var(--line); margin-top:40px;}
+  .foot-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:56px; flex-wrap:wrap; gap:32px;}
+  .foot-tag{ font-family:var(--display); font-weight:800; font-size:28px; max-width:340px; }
+  .social{ display:flex; gap:14px; margin-top:20px; }
+  .social a{ width:34px; height:34px; border:1px solid var(--line-strong); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:13px; }
+  .social a:hover{ color:var(--signal); border-color:var(--signal); }
+  .foot-cols{ display:grid; grid-template-columns:repeat(4,1fr); gap:24px; flex:1; max-width:640px; }
+  .foot-col h4{ font-family:var(--mono); font-size:12px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dimmer); margin-bottom:16px; }
+  .foot-col a{ display:block; color:var(--text-dim); font-size:14px; padding:5px 0; }
+  .foot-col a:hover{ color:var(--text); }
+  .foot-bottom{ display:flex; justify-content:space-between; align-items:center; padding-top:28px; border-top:1px solid var(--line); flex-wrap:wrap; gap:12px; }
+  .foot-bottom, .foot-bottom a{ color:var(--text-dimmer); font-size:13px; }
+  @media (max-width:900px){ .foot-cols{ grid-template-columns:repeat(2,1fr); } .foot-top{flex-direction:column;} }
+  @media (max-width:640px){
+    .hero-inner{ grid-template-columns:1fr; }
+    .wrap{ padding:0 20px; }
+    .cta-band{ margin:0 20px; padding:52px 24px; }
+  }
+
+  .reveal{ opacity:0; transform:translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in{ opacity:1; transform:translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="announce"><b>Walmart to acquire Vibe</b><span class="dot">●</span>Streaming TV advertising, now backed by retail scale</div>
+  <div class="navbar">
+    <div class="logo"><span class="rec"></span>vibe</div>
+    <nav class="navlinks">
+      <a href="#features">Product</a>
+      <a href="#industries">Industries</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#customers">Customers</a>
+      <a href="#resources">Resources</a>
+    </nav>
+    <div class="navcta">
+      <a class="btn-text" href="#login">Log in</a>
+      <a class="btn btn-ghost" href="#demo">Book a demo</a>
+      <a class="btn btn-primary" href="#start">Get started</a>
+    </div>
+    <button class="menu-toggle" aria-label="menu">☰</button>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="wrap hero-inner">
+    <div>
+      <span class="eyebrow">● on air — self-serve CTV</span>
+      <h1 class="headline">Big Screen.<br><span class="channel-flip" id="flip">Big Results.</span></h1>
+      <p class="sub">Launch television campaigns across 500+ streaming channels in minutes, then watch every view, click, and sale roll back to one dashboard.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary btn-lg" href="#start">Get started</a>
+        <a class="btn btn-ghost btn-lg" href="#demo">Book a demo</a>
+      </div>
+      <div class="g2row"><span class="stars">★★★★★</span> 4.8 / 5 on G2 — trusted by 10,000+ marketers</div>
+    </div>
+    <div class="tv-frame">
+      <div class="tv-screen">
+        <div class="tv-topline">
+          <span>CH — 01</span>
+          <span class="tv-live"><span class="dot"></span>LIVE CAMPAIGN</span>
+        </div>
+        <div class="tv-ticker">
+          <span class="big">3.4x</span>
+          <span class="cap">Return on<br>ad spend</span>
+        </div>
+        <div class="tv-bars" id="bars"></div>
+        <div class="chin">
+          <span>VIBE STUDIO</span>
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="marquee-section">
+  <div class="marquee-track" id="marquee"></div>
+</div>
+
+<section class="trust reveal">
+  <div class="wrap">
+    <div class="count"><span>10,000+</span> marketers</div>
+    <div class="label">have run television campaigns and tracked real revenue through Vibe</div>
+  </div>
+</section>
+
+<section id="industries">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Every goal, one screen</div>
+      <h2>Built for whatever growth looks like right now</h2>
+      <p>Pick the outcome you're chasing. Vibe shapes targeting, creative, and reporting around it.</p>
+    </div>
+    <div class="goals reveal">
+      <div class="goal-pill"><span class="n">01</span>Build Awareness</div>
+      <div class="goal-pill"><span class="n">02</span>Attract Traffic</div>
+      <div class="goal-pill"><span class="n">03</span>Generate Leads</div>
+      <div class="goal-pill"><span class="n">04</span>Increase Sales</div>
+      <div class="goal-pill"><span class="n">05</span>Retarget Prospects</div>
+      <div class="goal-pill"><span class="n">06</span>Promote an App</div>
+      <div class="goal-pill"><span class="n">07</span>Account-Based Marketing</div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">The platform</div>
+      <h2>Made for marketers, built for outcomes</h2>
+      <p>Everything a performance team needs to treat the living room like a real, measurable channel.</p>
+    </div>
+    <div class="bento reveal">
+      <div class="card c1">
+        <div class="icon">▤</div>
+        <h3>Apps & Channels</h3>
+        <p>Reach viewers on 500+ premium apps and channels, from live sports to prestige streaming, and show up next to what your audience already watches.</p>
+      </div>
+      <div class="card c2">
+        <div class="icon">◎</div>
+        <h3>Audience Targeting</h3>
+        <p>Layer demographic, behavioral, and location signals so every impression lands on a household that matters.</p>
+      </div>
+      <div class="card c3">
+        <div class="icon">✳</div>
+        <h3>AI Optimization</h3>
+        <p>Machine learning continuously reallocates spend toward the placements actually driving results.</p>
+      </div>
+      <div class="card c4">
+        <div class="icon">▶</div>
+        <h3>AI Creatives</h3>
+        <p>Turn existing assets into broadcast-ready spots in under 10 seconds with Vibe Studio.</p>
+      </div>
+      <div class="card c5">
+        <div class="icon">▦</div>
+        <h3>Measurement</h3>
+        <p>Track reach, visits, and revenue across every screen with reporting built for finance and marketing alike.</p>
+      </div>
+      <div class="card c6">
+        <div class="icon">⇄</div>
+        <h3>Integrations & API</h3>
+        <p>Connect Klaviyo, Shopify, GA and 20+ partners for closed-loop attribution.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="customers">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">In their words</div>
+      <h2>From scrappy DTC to household names</h2>
+      <p>Brands of every size run their television budget through Vibe.</p>
+    </div>
+    <div class="testi-row reveal">
+      <div class="testi-card">
+        <span class="testi-tag">+3.25x ROAS</span>
+        <p class="testi-quote">We want this to be part of our mix long term, and we know it can scale with a partner like Vibe.</p>
+        <div class="testi-foot"><div class="avatar"></div><div><div class="testi-name">Sheryl Clark</div><div class="testi-role">President & CEO, Boston Proper</div></div></div>
+      </div>
+      <div class="testi-card">
+        <span class="testi-tag">14x ROAS</span>
+        <p class="testi-quote">We needed a platform that could act as an objective third party on where our money is going and what it's returning.</p>
+        <div class="testi-foot"><div class="avatar"></div><div><div class="testi-name">Oscar Romano</div><div class="testi-role">COO, Blindster</div></div></div>
+      </div>
+      <div class="testi-card">
+        <span class="testi-tag">13x ROI</span>
+        <p class="testi-quote">Retargeting turned out to be our sweet spot — real engagement, measurable results.</p>
+        <div class="testi-foot"><div class="avatar"></div><div><div class="testi-name">Jake Kloberdanz</div><div class="testi-role">CEO, ONEHOPE</div></div></div>
+      </div>
+      <div class="testi-card">
+        <span class="testi-tag">Trusted reporting</span>
+        <p class="testi-quote">Reads like this build trust between marketing and finance — it's what lets teams move fast and scale with confidence.</p>
+        <div class="testi-foot"><div class="avatar"></div><div><div class="testi-name">Richard Khang</div><div class="testi-role">Co-founder & CRO, Work Magic</div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Success stories</div>
+      <h2>Numbers teams actually report upward</h2>
+    </div>
+    <div class="story-grid reveal">
+      <div class="story"><div class="metric">$0.93</div><div class="desc">Cost per session — Meshki beats ROAS and CPV goals</div></div>
+      <div class="story"><div class="metric">-80%</div><div class="desc">Cost per session — Abuelo's cuts acquisition cost</div></div>
+      <div class="story"><div class="metric">458%</div><div class="desc">Household reach growth — a regional mall's CTV debut</div></div>
+      <div class="story"><div class="metric">728%</div><div class="desc">ROAS — TruHeight's first year on streaming TV</div></div>
+      <div class="story"><div class="metric">409%</div><div class="desc">ROAS — Hoodsly turns TV into a repeatable channel</div></div>
+      <div class="story"><div class="metric">165%</div><div class="desc">ROAS — King Kanine scales with machine-learned bidding</div></div>
+      <div class="story"><div class="metric">2,000%</div><div class="desc">ROAS — Branded Bills pairs Klaviyo with Vibe</div></div>
+      <div class="story"><div class="metric">1,750%</div><div class="desc">ROAS — SIG SAUER pushes past expectations</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head reveal" style="margin:0 auto 48px; text-align:center;">
+      <div class="kicker" style="justify-content:center;">Recognized by G2</div>
+      <h2>A leader across streaming and CTV advertising</h2>
+    </div>
+    <div class="badge-row reveal">
+      <div class="g2badge"><div class="medal"></div><span>Leader<br>Video Advertising</span></div>
+      <div class="g2badge"><div class="medal"></div><span>Momentum<br>Leader</span></div>
+      <div class="g2badge"><div class="medal"></div><span>Easiest<br>To Use</span></div>
+      <div class="g2badge"><div class="medal"></div><span>Best<br>Est. ROI</span></div>
+      <div class="g2badge"><div class="medal"></div><span>Fastest<br>Go-Live</span></div>
+      <div class="g2badge"><div class="medal"></div><span>High<br>Performer</span></div>
+      <div class="g2badge"><div class="medal"></div><span>Most<br>Recommended</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="cta-band reveal">
+    <div class="kicker" style="justify-content:center;">Ready when you are</div>
+    <h2>Get started with Vibe in minutes</h2>
+    <div class="g2row"><span class="stars">★★★★★</span> 4.8/5 on G2 — 100+ reviews</div>
+    <div class="cta-btns">
+      <a class="btn btn-primary btn-lg" href="#demo">Book a demo</a>
+      <a class="btn btn-ghost btn-lg" href="#start">Get started</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-top">
+      <div>
+        <div class="logo"><span class="rec"></span>vibe</div>
+        <p class="foot-tag" style="margin-top:16px; font-size:22px;">Grow your brand<br>with TV ads.</p>
+        <div class="social">
+          <a href="#">in</a><a href="#">yt</a><a href="#">fb</a><a href="#">x</a>
+        </div>
+      </div>
+      <div class="foot-cols">
+        <div class="foot-col">
+          <h4>Industries</h4>
+          <a href="#">Apps & Gaming</a>
+          <a href="#">Ecommerce</a>
+          <a href="#">Automotive</a>
+          <a href="#">Retail</a>
+          <a href="#">B2B</a>
+        </div>
+        <div class="foot-col">
+          <h4>Features</h4>
+          <a href="#">Apps & Channels</a>
+          <a href="#">Audience Targeting</a>
+          <a href="#">AI Optimization</a>
+          <a href="#">Measurement</a>
+          <a href="#">AI Creatives</a>
+        </div>
+        <div class="foot-col">
+          <h4>Resources</h4>
+          <a href="#">Video Generator</a>
+          <a href="#">Pricing</a>
+          <a href="#">Case Studies</a>
+          <a href="#">Help Center</a>
+          <a href="#">Blog</a>
+        </div>
+        <div class="foot-col">
+          <h4>Company</h4>
+          <a href="#">About us</a>
+          <a href="#">Events</a>
+          <a href="#">Jobs</a>
+          <a href="#">Newsroom</a>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 Vibe, Inc.</span>
+      <span><a href="#">Privacy Policy</a> &nbsp;·&nbsp; <a href="#">Terms of Service</a></span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Channel marquee — build a scrolling "channel guide" strip
+  const channels = ["CNN","ESPN","HULU","ROKU","PEACOCK","TUBI","NBA","NFL","MLB","NHL","CBS","PLUTO TV","SLING","PHILO","AMC","BLOOMBERG","PLEX","DISNEY+","SAMSUNG TV+","PARAMOUNT+"];
+  const track = document.getElementById('marquee');
+  const build = () => channels.map((c,i) => `<div class="chan-badge"><span class="num">${String(i+1).padStart(2,'0')}</span>${c}</div>`).join('');
+  track.innerHTML = build() + build();
+
+  // TV bars — little animated equalizer inside the screen mock
+  const bars = document.getElementById('bars');
+  for(let i=0;i<24;i++){
+    const b = document.createElement('i');
+    b.style.animation = `bar ${1 + Math.random()*1.2}s ease-in-out ${Math.random()*1}s infinite`;
+    bars.appendChild(b);
+  }
+  const styleTag = document.createElement('style');
+  styleTag.textContent = `@keyframes bar{0%,100%{height:${8}px} 50%{height:${10 + Math.random()*34}px}}`;
+  document.head.appendChild(styleTag);
+  document.querySelectorAll('#bars i').forEach(b=>{
+    b.style.height = (10 + Math.random()*34) + 'px';
+    b.animate(
+      [{height: (6+Math.random()*10)+'px'},{height:(16+Math.random()*28)+'px'},{height:(6+Math.random()*10)+'px'}],
+      {duration: 900 + Math.random()*900, iterations: Infinity}
+    );
+  });
+
+  // Channel-flip headline: cycles through outcome words like changing channels
+  const words = ["Big Results.","Real ROAS.","Live Reach.","Measured Sales."];
+  let wi = 0;
+  const flipEl = document.getElementById('flip');
+  setInterval(() => {
+    wi = (wi + 1) % words.length;
+    flipEl.style.opacity = 0;
+    setTimeout(() => { flipEl.textContent = words[wi]; flipEl.style.opacity = 1; }, 260);
+  }, 2600);
+  flipEl.style.transition = 'opacity .26s ease';
+
+  // Scroll reveal
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, {threshold:0.12});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+
+</body>
+</html>
