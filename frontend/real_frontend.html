@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vibe — Streaming TV Advertising</title>
+<title>Adcraft.ai — Streaming TV Advertising</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -62,15 +62,17 @@
     border-bottom:1px solid var(--line);
   }
   .announce{
-    background:linear-gradient(90deg, #10151d, #161b24 50%, #10151d);
-    border-bottom:1px solid var(--line);
+    background:var(--signal);
     text-align:center;
-    font-size:13px;
-    color:var(--text-dim);
-    padding:9px 16px;
+    font-size:13.5px;
+    color:#04070d;
+    padding:11px 16px;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    font-weight:500;
   }
-  .announce b{color:var(--text); font-weight:600;}
-  .announce span.dot{color:var(--tape); margin:0 8px;}
+  .announce b{font-weight:700;}
+  .announce .spark{ display:inline-flex; }
+  .announce a.ann-link{ font-weight:700; display:inline-flex; align-items:center; gap:4px; text-decoration:underline; text-underline-offset:2px; }
   .navbar{
     display:flex; align-items:center; justify-content:space-between;
     padding:16px 32px;
@@ -337,16 +339,139 @@
 
   .reveal{ opacity:0; transform:translateY(18px); transition: opacity .6s ease, transform .6s ease; }
   .reveal.in{ opacity:1; transform:translateY(0); }
+
+  /* ---------- MEGA MENU ---------- */
+  .nav-item{ position:relative; }
+  .dropdown-trigger{
+    background:none; border:none; font:inherit; font-weight:500; font-size:14.5px;
+    color:var(--text-dim); cursor:pointer; padding:0; display:flex; align-items:center; gap:6px;
+  }
+  .dropdown-trigger:hover{ color:var(--text); }
+  .nav-item.open .dropdown-trigger{ color:var(--text); }
+  .dropdown-trigger .chev{ transition:transform .2s ease; }
+  .nav-item.open .dropdown-trigger .chev{ transform:rotate(180deg); }
+
+  .mega-menu{
+    position:absolute; top:calc(100% + 22px); left:0;
+    transform:translateY(-6px);
+    width:800px; max-width:min(88vw, 800px);
+    background:var(--panel-2);
+    border:1px solid var(--line-strong);
+    border-radius:18px;
+    padding:26px;
+    display:grid; grid-template-columns:1fr 1fr 1.05fr; gap:4px 30px;
+    box-shadow:0 40px 80px -24px rgba(0,0,0,0.65);
+    opacity:0; visibility:hidden; pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease, visibility .16s;
+    z-index:200;
+  }
+  .nav-item.open .mega-menu{ opacity:1; visibility:visible; pointer-events:auto; transform:translateY(0); }
+  .mega-label{
+    font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--text-dimmer); margin-bottom:12px; padding:0 10px;
+  }
+  .mega-item{
+    display:flex; align-items:center; gap:12px; padding:9px 10px; border-radius:9px;
+    color:var(--text); font-weight:600; font-size:14px; transition:background .15s ease;
+  }
+  .mega-item svg{ color:var(--text-dimmer); flex-shrink:0; transition:color .15s ease; }
+  .mega-item:hover{ background:var(--signal-dim); }
+  .mega-item:hover svg{ color:var(--signal); }
+  .mega-promo{
+    background:
+      linear-gradient(140deg, rgba(91,140,255,0.30), rgba(255,93,58,0.20)),
+      var(--panel);
+    border:1px solid var(--line-strong); border-radius:13px;
+    padding:22px; display:flex; flex-direction:column; gap:8px; justify-content:center;
+  }
+  .mega-promo .promo-label{ font-family:var(--display); font-weight:800; font-size:23px; }
+  .mega-promo p{ font-size:13.5px; color:rgba(242,244,248,0.85); line-height:1.4; }
+  .mega-promo .btn{ align-self:flex-start; margin-top:8px; padding:9px 16px; font-size:13.5px; }
+  @media (max-width:900px){ .mega-menu{ display:none; } }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="announce"><b>Walmart to acquire Vibe</b><span class="dot">●</span>Streaming TV advertising, now backed by retail scale</div>
+  <div class="announce">
+    <span class="spark">✳</span>
+    <b>Adcraft.ai raises $60M Series B</b>
+    <a class="ann-link" href="#news">Read the announcement ›</a>
+  </div>
   <div class="navbar">
-    <div class="logo"><span class="rec"></span>vibe</div>
+    <div class="logo"><span class="rec"></span>adcraft</div>
     <nav class="navlinks">
-      <a href="#features">Product</a>
+      <div class="nav-item" id="productNav">
+        <button class="dropdown-trigger" type="button">
+          Product
+          <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="mega-menu">
+          <div class="mega-col">
+            <div class="mega-label">By goal</div>
+            <a class="mega-item" href="#industries">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a2 2 0 002 2h1l4 4V7l-4 4H5a2 2 0 00-2 2z"/><path d="M14 8a4 4 0 010 8"/><path d="M17 5a8 8 0 010 14"/></svg>
+              Build Awareness
+            </a>
+            <a class="mega-item" href="#industries">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
+              Attract Traffic
+            </a>
+            <a class="mega-item" href="#industries">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2.5 19.5c0-3.3 2.9-6 6.5-6s6.5 2.7 6.5 6"/><circle cx="17.5" cy="9.5" r="2.3"/><path d="M15.3 14c2.6.4 4.7 2.4 4.7 5"/></svg>
+              Generate Leads
+            </a>
+            <a class="mega-item" href="#industries">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.3 9.3c0-1.2 1.2-2.1 2.7-2.1s2.7.8 2.7 1.9-1.2 1.6-2.7 1.9-2.7.8-2.7 1.9 1.2 1.9 2.7 1.9 2.7-.9 2.7-2.1"/></svg>
+              Increase Sales
+            </a>
+            <a class="mega-item" href="#industries">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 1 2.8 6.3"/><path d="M3.5 17v-5h5"/></svg>
+              Retarget Prospects
+            </a>
+            <a class="mega-item" href="#industries">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+              Promote Your App
+            </a>
+            <a class="mega-item" href="#industries">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 7h2M14 7h2M8 11h2M14 11h2M8 15h2M14 15h2"/></svg>
+              Account Based Marketing
+            </a>
+          </div>
+          <div class="mega-col">
+            <div class="mega-label">By feature</div>
+            <a class="mega-item" href="#features">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+              Apps & Channels
+            </a>
+            <a class="mega-item" href="#features">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6" fill="currentColor"/></svg>
+              Audience Targeting
+            </a>
+            <a class="mega-item" href="#features">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M3 20h18"/></svg>
+              Measurement & Reporting
+            </a>
+            <a class="mega-item" href="#features">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 00-2-1.2L16 3h-4l-.6 2.6a7 7 0 00-2 1.2l-2.3-.9-2 3.4 2 1.5A7 7 0 005 12a7 7 0 00.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 002 1.2L10 21h4l.6-2.6a7 7 0 002-1.2l2.3.9 2-3.4-2-1.5c.07-.4.1-.8.1-1.2z"/></svg>
+              Integrations & API
+            </a>
+            <a class="mega-item" href="#features">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M3 7l3-4h4l-3 4M11 7l3-4h4l-3 4M3 7h18"/></svg>
+              AI Creatives
+            </a>
+            <a class="mega-item" href="#features">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z"/><path d="M19 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6.6-1.6z"/></svg>
+              AI Optimization
+            </a>
+          </div>
+          <div class="mega-promo">
+            <div class="promo-label">Adcraft Studio</div>
+            <p>Create a TV ad spot for free in 2 minutes.</p>
+            <a class="btn btn-primary" href="#studio">Get started</a>
+          </div>
+        </div>
+      </div>
       <a href="#industries">Industries</a>
       <a href="#pricing">Pricing</a>
       <a href="#customers">Customers</a>
@@ -386,7 +511,7 @@
         </div>
         <div class="tv-bars" id="bars"></div>
         <div class="chin">
-          <span>VIBE STUDIO</span>
+          <span>ADCRAFT STUDIO</span>
           <div class="dots"><span></span><span></span><span></span></div>
         </div>
       </div>
@@ -401,7 +526,7 @@
 <section class="trust reveal">
   <div class="wrap">
     <div class="count"><span>10,000+</span> marketers</div>
-    <div class="label">have run television campaigns and tracked real revenue through Vibe</div>
+    <div class="label">have run television campaigns and tracked real revenue through Adcraft</div>
   </div>
 </section>
 
@@ -410,7 +535,7 @@
     <div class="section-head reveal">
       <div class="kicker">Every goal, one screen</div>
       <h2>Built for whatever growth looks like right now</h2>
-      <p>Pick the outcome you're chasing. Vibe shapes targeting, creative, and reporting around it.</p>
+      <p>Pick the outcome you're chasing. Adcraft shapes targeting, creative, and reporting around it.</p>
     </div>
     <div class="goals reveal">
       <div class="goal-pill"><span class="n">01</span>Build Awareness</div>
@@ -450,7 +575,7 @@
       <div class="card c4">
         <div class="icon">▶</div>
         <h3>AI Creatives</h3>
-        <p>Turn existing assets into broadcast-ready spots in under 10 seconds with Vibe Studio.</p>
+        <p>Turn existing assets into broadcast-ready spots in under 10 seconds with Adcraft Studio.</p>
       </div>
       <div class="card c5">
         <div class="icon">▦</div>
@@ -471,12 +596,12 @@
     <div class="section-head reveal">
       <div class="kicker">In their words</div>
       <h2>From scrappy DTC to household names</h2>
-      <p>Brands of every size run their television budget through Vibe.</p>
+      <p>Brands of every size run their television budget through Adcraft.</p>
     </div>
     <div class="testi-row reveal">
       <div class="testi-card">
         <span class="testi-tag">+3.25x ROAS</span>
-        <p class="testi-quote">We want this to be part of our mix long term, and we know it can scale with a partner like Vibe.</p>
+        <p class="testi-quote">We want this to be part of our mix long term, and we know it can scale with a partner like Adcraft.</p>
         <div class="testi-foot"><div class="avatar"></div><div><div class="testi-name">Sheryl Clark</div><div class="testi-role">President & CEO, Boston Proper</div></div></div>
       </div>
       <div class="testi-card">
@@ -511,7 +636,7 @@
       <div class="story"><div class="metric">728%</div><div class="desc">ROAS — TruHeight's first year on streaming TV</div></div>
       <div class="story"><div class="metric">409%</div><div class="desc">ROAS — Hoodsly turns TV into a repeatable channel</div></div>
       <div class="story"><div class="metric">165%</div><div class="desc">ROAS — King Kanine scales with machine-learned bidding</div></div>
-      <div class="story"><div class="metric">2,000%</div><div class="desc">ROAS — Branded Bills pairs Klaviyo with Vibe</div></div>
+      <div class="story"><div class="metric">2,000%</div><div class="desc">ROAS — Branded Bills pairs Klaviyo with Adcraft</div></div>
       <div class="story"><div class="metric">1,750%</div><div class="desc">ROAS — SIG SAUER pushes past expectations</div></div>
     </div>
   </div>
@@ -538,7 +663,7 @@
 <section>
   <div class="cta-band reveal">
     <div class="kicker" style="justify-content:center;">Ready when you are</div>
-    <h2>Get started with Vibe in minutes</h2>
+    <h2>Get started with Adcraft in minutes</h2>
     <div class="g2row"><span class="stars">★★★★★</span> 4.8/5 on G2 — 100+ reviews</div>
     <div class="cta-btns">
       <a class="btn btn-primary btn-lg" href="#demo">Book a demo</a>
@@ -551,7 +676,7 @@
   <div class="wrap">
     <div class="foot-top">
       <div>
-        <div class="logo"><span class="rec"></span>vibe</div>
+        <div class="logo"><span class="rec"></span>adcraft</div>
         <p class="foot-tag" style="margin-top:16px; font-size:22px;">Grow your brand<br>with TV ads.</p>
         <div class="social">
           <a href="#">in</a><a href="#">yt</a><a href="#">fb</a><a href="#">x</a>
@@ -592,7 +717,7 @@
       </div>
     </div>
     <div class="foot-bottom">
-      <span>© 2026 Vibe, Inc.</span>
+      <span>© 2026 Adcraft, Inc.</span>
       <span><a href="#">Privacy Policy</a> &nbsp;·&nbsp; <a href="#">Terms of Service</a></span>
     </div>
   </div>
@@ -633,6 +758,16 @@
     setTimeout(() => { flipEl.textContent = words[wi]; flipEl.style.opacity = 1; }, 260);
   }, 2600);
   flipEl.style.transition = 'opacity .26s ease';
+
+  // Product mega menu toggle
+  const productNav = document.getElementById('productNav');
+  const productTrigger = productNav.querySelector('.dropdown-trigger');
+  productTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    productNav.classList.toggle('open');
+  });
+  document.addEventListener('click', () => productNav.classList.remove('open'));
+  document.addEventListener('keydown', (e) => { if(e.key === 'Escape') productNav.classList.remove('open'); });
 
   // Scroll reveal
   const io = new IntersectionObserver((entries)=>{
