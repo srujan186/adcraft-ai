@@ -28,14 +28,13 @@ export default function ResultPage() {
     if (!raw) { router.replace("/generate"); return; }
     const data: VideoResult = JSON.parse(raw);
     setResult(data);
-    // video_url may be a filename or a relative path
     setVideoSrc(videoFileUrl(data.video_url));
   }, [router]);
 
   if (!result) {
     return (
       <div style={{ textAlign: "center", padding: "6rem 0", color: "var(--text-muted)" }}>
-        <div className="spinner" style={{ margin: "0 auto 1rem" }} />
+        <span className="spinner spinner-dark" style={{ margin: "0 auto 1rem", display: "block" }} />
         <p>Loading result…</p>
       </div>
     );
@@ -44,7 +43,6 @@ export default function ResultPage() {
   const script = result.script;
   const scraped = result.scraped;
 
-  // ── Show the full-screen editor ─────────────────────────────────────────
   if (editing) {
     return (
       <VideoEditor
@@ -63,21 +61,21 @@ export default function ResultPage() {
   }
 
   return (
-    <div className="section" style={{ padding: "3rem 0 5rem" }}>
-      <div className="container" style={{ maxWidth: 820 }}>
+    <section className="section">
+      <div className="container" style={{ maxWidth: 900 }}>
         {/* Header */}
-        <div className="fade-up" style={{ marginBottom: "2rem" }}>
-          <div className="badge" style={{ marginBottom: "0.75rem" }}>✅ Your ad is ready</div>
-          <h1 className="section-title">
-            {scraped.business_name} — Video Ad
-          </h1>
-          <p className="section-sub">
-            Download your video or create another one below.
+        <div style={{ marginBottom: "2rem" }}>
+          <span className="badge" style={{ marginBottom: "0.85rem" }}>
+            ✅ Your ad is ready
+          </span>
+          <h1 className="h2">{scraped.business_name} — Video Ad</h1>
+          <p className="lead" style={{ marginTop: "0.5rem" }}>
+            Download your video, tweak it in the editor, or create another one.
           </p>
         </div>
 
         {/* Video player */}
-        <div className="video-wrap fade-up fade-up-d1" style={{ marginBottom: "1.5rem" }} id="video-player">
+        <div className="video-wrap" style={{ marginBottom: "1.5rem" }} id="video-player">
           <video
             controls
             autoPlay
@@ -86,60 +84,49 @@ export default function ResultPage() {
           />
         </div>
 
-        {/* Action buttons */}
-        <div style={{ display: "flex", gap: "0.75rem", marginBottom: "2.5rem" }} className="fade-up fade-up-d2">
-          <button
-            id="download-btn"
-            className="btn btn-primary"
-            onClick={handleDownload}
-          >
+        {/* Actions */}
+        <div style={{ display: "flex", gap: "0.75rem", marginBottom: "2.5rem", flexWrap: "wrap" }}>
+          <button id="download-btn" className="btn btn-primary" onClick={handleDownload}>
             ⬇️ Download MP4
           </button>
           <button
             id="edit-video-btn"
             className="btn btn-secondary"
             onClick={() => setEditing(true)}
-            style={{ borderColor: "rgba(108,99,255,0.4)", color: "var(--accent2)" }}
           >
-            ✏️ Edit Video
+            ✏️ Edit video
           </button>
           <Link href="/generate" className="btn btn-secondary" id="create-another-btn">
-            🔄 Create Another
+            🔄 Create another
           </Link>
         </div>
 
-        <div className="divider" />
-
-        {/* ── Bottom Banner editor ──────────────────────────────── */}
+        {/* Bottom banner editor */}
         {scraped && <BottomBanner scraped={scraped} />}
-
-        <div className="divider" style={{ marginTop: "2rem" }} />
 
         {/* Brand info */}
         {scraped && (
-          <div className="fade-up" style={{ margin: "2rem 0" }}>
-            <h2 className="section-title" style={{ fontSize: "1.2rem", marginBottom: "1rem" }}>
-              Brand Extracted
-            </h2>
+          <div style={{ margin: "2.5rem 0" }}>
+            <h2 className="h3" style={{ marginBottom: "1rem" }}>Brand extracted</h2>
             <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
               <p><strong>Business:</strong> {scraped.business_name}</p>
               {scraped.tagline && <p><strong>Tagline:</strong> {scraped.tagline}</p>}
               {scraped.description && (
-                <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>{scraped.description}</p>
+                <p className="feature-desc">{scraped.description}</p>
               )}
               {scraped.colors && (
                 <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.3rem" }}>
-                  <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Colors detected:</span>
+                  <span className="hint">Colours detected:</span>
                   {Object.entries(scraped.colors).map(([k, v]) => (
                     <span
                       key={k}
                       title={`${k}: ${v}`}
                       style={{
                         display: "inline-block",
-                        width: 20, height: 20,
+                        width: 22, height: 22,
                         borderRadius: "50%",
                         background: v,
-                        border: "1px solid rgba(255,255,255,0.15)",
+                        border: "1px solid var(--border-str)",
                       }}
                     />
                   ))}
@@ -149,12 +136,10 @@ export default function ResultPage() {
           </div>
         )}
 
-        {/* Ad Script */}
+        {/* Ad script */}
         {script && (
-          <div className="fade-up fade-up-d1">
-            <h2 className="section-title" style={{ fontSize: "1.2rem", marginBottom: "1rem" }}>
-              Generated Script
-            </h2>
+          <div>
+            <h2 className="h3" style={{ marginBottom: "1rem" }}>Generated script</h2>
             <div className="script-grid">
               {SCRIPT_FIELDS.map(({ key, label }) =>
                 script[key] ? (
@@ -172,6 +157,6 @@ export default function ResultPage() {
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

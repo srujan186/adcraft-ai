@@ -55,7 +55,7 @@ export default function BottomBanner({ scraped }: Props) {
   const brandAccent = banner.accentColor;
 
   return (
-    <div className="fade-up" style={{ marginTop: "2rem" }}>
+    <div style={{ marginTop: "2rem" }}>
       {/* Section header — click to expand */}
       <button
         id="bottom-banner-toggle"
@@ -80,22 +80,13 @@ export default function BottomBanner({ scraped }: Props) {
         <span style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <span style={{
             fontSize: "1.2rem",
-            background: "linear-gradient(135deg,#f472b6,#a78bfa)",
+            background: "var(--accent-soft)",
             borderRadius: "8px",
             width: 32, height: 32,
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>🏷️</span>
           Bottom Banner
-          <span style={{
-            fontSize: "0.72rem",
-            fontWeight: 600,
-            padding: "0.2rem 0.55rem",
-            borderRadius: "999px",
-            background: "rgba(167,139,250,0.15)",
-            color: "var(--accent2)",
-            border: "1px solid rgba(167,139,250,0.25)",
-            marginLeft: "0.25rem",
-          }}>NEW</span>
+          <span className="badge" style={{ marginLeft: "0.25rem" }}>NEW</span>
         </span>
         <span style={{
           transform: open ? "rotate(180deg)" : "rotate(0deg)",
@@ -248,8 +239,8 @@ export default function BottomBanner({ scraped }: Props) {
               <div style={{
                 borderRadius: "12px",
                 overflow: "hidden",
-                border: "1px solid var(--border-glow)",
-                boxShadow: "0 0 30px rgba(108,99,255,0.15)",
+                border: "1px solid var(--border)",
+                boxShadow: "var(--shadow-md)",
                 background: "#000",
                 aspectRatio: "16/9",
                 position: "relative",

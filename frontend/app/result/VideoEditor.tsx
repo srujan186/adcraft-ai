@@ -143,7 +143,7 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
                 value={edits.voiceover}
                 onChange={(e) => set("voiceover", e.target.value)} />
             </VeField>
-            <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.3)", lineHeight: 1.5 }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
               Keep it under {script.voiceover?.split(" ").length ?? 60} words to match your video duration.
             </p>
           </div>
@@ -354,7 +354,7 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
               <span className="ve-duration-badge">
                 {result.script ? "0:00" : "--:--"}
               </span>
-              <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.2)", marginLeft: "0.5rem" }}>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginLeft: "0.5rem" }}>
                 Timeline (visual)
               </span>
             </div>

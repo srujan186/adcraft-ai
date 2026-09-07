@@ -1,24 +1,34 @@
 import type { Metadata } from "next";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-import Link from "next/link";
+import AnnounceBar from "./components/AnnounceBar";
+import SiteHeader from "./components/SiteHeader";
+import SiteFooter from "./components/SiteFooter";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+const display = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-display",
+});
 
 export const metadata: Metadata = {
-  title: "AdCraft AI — Generate Video Ads in Seconds",
-  description: "Paste any business URL and get a polished video ad in under a minute. Powered by AI.",
+  title: "AdCraft AI — Turn any URL into a video ad",
+  description:
+    "Paste your business URL and get a polished, broadcast-ready video ad in under a minute. Powered by AI.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${display.variable}`}>
       <body>
-        <nav className="nav">
-          <Link className="nav-logo" href="/">⚡ AdCraft AI</Link>
-          <div className="nav-links">
-            <Link className="nav-link" href="/">Home</Link>
-            <Link className="nav-link" href="/generate">Create Ad</Link>
-          </div>
-        </nav>
+        <AnnounceBar />
+        <SiteHeader />
         <main>{children}</main>
+        <SiteFooter />
       </body>
     </html>
   );
