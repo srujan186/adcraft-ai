@@ -1,6 +1,8 @@
 import Link from "next/link";
 import HeroForm from "./components/HeroForm";
 import Reveal from "./components/Reveal";
+import Faq from "./components/Faq";
+import { FAQ } from "./content/faq";
 
 const STEPS = [
   {
@@ -32,7 +34,7 @@ const CAPABILITIES = [
   { label: "Durations", count: "15s / 30s" },
   { label: "Music beds", count: "5" },
   { label: "Voice options", count: "4" },
-  { label: "Output", count: "1080p MP4" },
+  { label: "Output", count: "720p MP4" },
 ];
 
 const GALLERY = [
@@ -46,21 +48,6 @@ const GALLERY = [
   { icon: "🚗", label: "Automotive",   meta: "30s · Bold" },
   { icon: "🎓", label: "Education",    meta: "30s · Modern" },
   { icon: "💇", label: "Salon & spa",  meta: "15s · Playful" },
-];
-
-// TODO: Replace with real customer quotes before launch. These are dummy
-// placeholders — the .is-placeholder marker renders a visible PLACEHOLDER chip.
-const TESTIMONIALS = [
-  { quote: "[Placeholder quote — replace with a real customer testimonial before launch. Two to three sentences about the result they got.]", name: "[Customer Name]", role: "[Role, Company]" },
-  { quote: "[Placeholder quote — replace with a real customer testimonial before launch. Two to three sentences about the result they got.]", name: "[Customer Name]", role: "[Role, Company]" },
-  { quote: "[Placeholder quote — replace with a real customer testimonial before launch. Two to three sentences about the result they got.]", name: "[Customer Name]", role: "[Role, Company]" },
-];
-
-// TODO: Replace with real case studies and verified metrics before launch.
-const CASES = [
-  { icon: "📈", metric: "[00%]", title: "[Case study headline]", desc: "[One line on what the customer achieved. Replace with real, verifiable numbers.]" },
-  { icon: "🎯", metric: "[00x]", title: "[Case study headline]", desc: "[One line on what the customer achieved. Replace with real, verifiable numbers.]" },
-  { icon: "⚡", metric: "[$0.00]", title: "[Case study headline]", desc: "[One line on what the customer achieved. Replace with real, verifiable numbers.]" },
 ];
 
 export default function LandingPage() {
@@ -96,15 +83,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Trust strip ───────────────────────────────────────────────── */}
+      {/* ── Trust strip — verifiable product facts only ────────────────── */}
       <div className="container">
-        <div className="trust-strip is-placeholder">
-          {/* TODO: Replace with a real rating once you have one. */}
-          <span className="trust-item">
-            <span className="stars">★★★★★</span> [0.0] out of 5 — [review source]
-          </span>
-          <span className="trust-item">🎬 [0,000]+ ads generated</span>
-          <span className="trust-item">⚡ Average render [00]s</span>
+        <div className="trust-strip">
+          <span className="trust-item">✅ No signup required</span>
+          <span className="trust-item">💸 Free while in beta</span>
+          <span className="trust-item">🎬 720p MP4 download</span>
+          <span className="trust-item">⏱️ 15 or 30 seconds</span>
+          <span className="trust-item">🎨 4 ad styles</span>
         </div>
       </div>
 
@@ -221,50 +207,31 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Results / social proof (PLACEHOLDER DATA) ─────────────────── */}
-      <section className="section section-alt" id="results">
-        <div className="container">
+      {/* ── FAQ ───────────────────────────────────────────────────────── */}
+      <section className="section section-alt" id="faq">
+        <div className="container container-narrow">
           <Reveal>
             <div className="section-head center">
-              <span className="eyebrow">Results</span>
-              <h2 className="h2">What teams are saying</h2>
-              <span className="badge badge-placeholder" style={{ marginTop: "1rem" }}>
-                ⚠️ Dummy content — replace before launch
-              </span>
+              <span className="eyebrow">FAQ</span>
+              <h2 className="h2">Questions, answered</h2>
+              <p className="lead" style={{ marginTop: "0.85rem" }}>
+                What it costs, how long it takes, and what it does with your site.
+              </p>
             </div>
           </Reveal>
 
-          <div className="grid grid-3" style={{ marginBottom: "3rem" }}>
-            {TESTIMONIALS.map((t, i) => (
-              <Reveal key={i} delay={i * 80}>
-                <div className="quote-card is-placeholder">
-                  <p className="quote-text">“{t.quote}”</p>
-                  <div className="quote-author">
-                    <div className="quote-avatar">?</div>
-                    <div>
-                      <p className="quote-name">{t.name}</p>
-                      <p className="quote-role">{t.role}</p>
-                    </div>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+          <Reveal>
+            <Faq items={FAQ.slice(0, 8)} />
+          </Reveal>
 
-          <div className="grid grid-3">
-            {CASES.map((c, i) => (
-              <Reveal key={i} delay={i * 80}>
-                <div className="case-card is-placeholder">
-                  <div className="case-thumb">{c.icon}</div>
-                  <div className="case-body">
-                    <p className="case-metric">{c.metric}</p>
-                    <p className="h3">{c.title}</p>
-                    <p className="feature-desc">{c.desc}</p>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+          <Reveal>
+            <p className="hint" style={{ textAlign: "center", marginTop: "1.75rem" }}>
+              More in the{" "}
+              <Link href="/resources/help" style={{ color: "var(--accent)", fontWeight: 600 }}>
+                help centre
+              </Link>.
+            </p>
+          </Reveal>
         </div>
       </section>
 
@@ -291,7 +258,7 @@ export default function LandingPage() {
                 <p className="stat-label">Ad lengths</p>
               </div>
               <div className="stat">
-                <p className="stat-val">1080p</p>
+                <p className="stat-val">720p</p>
                 <p className="stat-label">MP4 download</p>
               </div>
             </div>

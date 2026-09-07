@@ -97,7 +97,7 @@ export default function SiteHeader() {
             ))}
 
             <Link className="nav-link" href="/#pricing" onClick={closeNow}>Pricing</Link>
-            <Link className="nav-link" href="/#results" onClick={closeNow}>Customers</Link>
+            <Link className="nav-link" href="/#faq" onClick={closeNow}>FAQ</Link>
           </nav>
 
           <div className="nav-actions">

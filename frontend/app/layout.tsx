@@ -24,7 +24,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${display.variable}`}>
-      <body>
+      {/* Browser extensions (Grammarly, password managers) inject attributes
+          into <body> before React hydrates. This suppresses that false
+          positive; it applies one level deep only, so real mismatches
+          inside the app still surface. */}
+      <body suppressHydrationWarning>
         <AnnounceBar />
         <SiteHeader />
         <main>{children}</main>

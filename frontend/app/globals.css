@@ -1077,3 +1077,164 @@ body {
 @media (max-width: 768px) {
   .mega-panel { display: none; }
 }
+
+/* ── FAQ accordion ──────────────────────────────────────────────────────── */
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.faq-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.faq-item.open { border-color: var(--border-str); box-shadow: var(--shadow-sm); }
+.faq-q-wrap { margin: 0; font-size: inherit; font-weight: inherit; }
+.faq-q {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-head);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  border-radius: var(--radius);
+}
+.faq-q:hover { color: var(--accent); }
+.faq-icon {
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--transition), color var(--transition);
+}
+.faq-item.open .faq-icon { transform: rotate(45deg); color: var(--accent); }
+.faq-a { padding: 0 1.25rem 1.2rem; }
+.faq-a p {
+  font-size: 0.94rem;
+  line-height: 1.7;
+  color: var(--text-mid);
+  max-width: 68ch;
+}
+
+/* ── Guides / ordered lists ─────────────────────────────────────────────── */
+.guide-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.guide-list li {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--text-mid);
+  padding-left: 0.25rem;
+}
+.guide-list li::marker { color: var(--accent); font-weight: 700; }
+
+/* ── Code blocks (API reference) ────────────────────────────────────────── */
+.code-block {
+  background: #0b1220;
+  color: #e2e8f0;
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1.05rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.code-block code { font-family: inherit; white-space: pre; }
+.code-inline {
+  background: var(--surface3);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.api-head { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.api-method {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0.22rem 0.5rem;
+  border-radius: 5px;
+  color: #fff;
+  flex-shrink: 0;
+}
+.api-get  { background: #0f766e; }
+.api-post { background: var(--accent); }
+.api-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+}
+.api-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  margin: 1rem 0 0.4rem;
+}
+
+/* ── Changelog timeline ─────────────────────────────────────────────────── */
+.timeline { display: flex; flex-direction: column; }
+.timeline-entry {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 1.25rem;
+  position: relative;
+  padding-bottom: 2.25rem;
+}
+.timeline-entry:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 22px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+.timeline-marker {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--surface);
+  margin-top: 2px;
+  position: relative;
+  z-index: 1;
+}
+.timeline-date {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.3rem;
+}
+.timeline-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.timeline-list li {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--text-mid);
+}
+.timeline-list li::marker { color: var(--border-str); }

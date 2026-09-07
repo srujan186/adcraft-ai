@@ -5,26 +5,30 @@ const COLUMNS = [
     title: "Product",
     links: [
       { label: "How it works", href: "/#how-it-works" },
-      { label: "Ad styles", href: "/#styles" },
+      { label: "Ad styles", href: "/features/ad-styles" },
+      { label: "Brand scraping", href: "/features/brand-scraping" },
+      { label: "Video editor", href: "/features/video-editor" },
       { label: "Pricing", href: "/#pricing" },
+    ],
+  },
+  {
+    title: "Industries",
+    links: [
+      { label: "E-commerce", href: "/industries/ecommerce" },
+      { label: "Restaurants & food", href: "/industries/restaurants" },
+      { label: "Real estate", href: "/industries/real-estate" },
+      { label: "SaaS & tech", href: "/industries/saas" },
+      { label: "Local services", href: "/industries/local-services" },
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
+      { label: "Help centre", href: "/resources/help" },
+      { label: "API reference", href: "/resources/api" },
+      { label: "Changelog", href: "/resources/changelog" },
+      { label: "FAQ", href: "/#faq" },
       { label: "Create an ad", href: "/generate" },
-    ],
-  },
-  {
-    title: "Built with",
-    links: [
-      { label: "Llama 3.3 70B via Groq", href: "/#how-it-works" },
-      { label: "Kokoro TTS", href: "/#how-it-works" },
-      { label: "Pexels stock footage", href: "/#how-it-works" },
-      { label: "FFmpeg", href: "/#how-it-works" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { label: "About", href: "/" },
-      { label: "Contact", href: "/" },
-      { label: "Careers", href: "/" },
     ],
   },
 ];
@@ -60,9 +64,10 @@ export default function SiteFooter() {
 
         <div className="footer-bottom">
           <span>© {new Date().getFullYear()} AdCraft AI</span>
+          {/* Privacy Policy / Terms links removed rather than left pointing at "/".
+              Add them back here once real legal pages exist. */}
           <div className="footer-legal">
-            <Link className="footer-link" href="/">Privacy Policy</Link>
-            <Link className="footer-link" href="/">Terms of Service</Link>
+            <span>Beta — free while in development</span>
           </div>
         </div>
       </div>
