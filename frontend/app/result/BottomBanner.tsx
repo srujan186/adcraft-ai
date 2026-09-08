@@ -1,15 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import type { ScrapeResult } from "@/lib/api";
-
-interface BannerData {
-  companyName: string;
-  phone: string;
-  address: string;
-  website: string;
-  primaryColor: string;
-  accentColor: string;
-}
+import { bannerStore, type BannerData } from "@/lib/clientStore";
 
 interface Props {
   scraped: ScrapeResult;
@@ -18,35 +10,47 @@ interface Props {
 export default function BottomBanner({ scraped }: Props) {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [banner, setBanner] = useState<BannerData>({
-    companyName: scraped.business_name ?? "",
-    phone: "",
-    address: "",
-    website: "",
-    primaryColor: scraped.colors?.primary ?? "#1a1a2e",
-    accentColor: scraped.colors?.accent ?? "#6c63ff",
-  });
+  const [draft, setDraft] = useState<Partial<BannerData> | null>(null);
 
-  // Load saved banner from sessionStorage on mount
-  useEffect(() => {
-    const raw = sessionStorage.getItem("adcraft_banner");
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as BannerData;
-        setBanner(parsed);
-      } catch {
-        // ignore
-      }
+  // Shared with the video editor's Banner tab — both are views of one store.
+  const raw = useSyncExternalStore(
+    bannerStore.subscribe,
+    bannerStore.getSnapshot,
+    bannerStore.getServerSnapshot
+  );
+
+  const defaults = useMemo<BannerData>(
+    () => ({
+      companyName: scraped.business_name ?? "",
+      phone: "",
+      address: "",
+      website: "",
+      primaryColor: scraped.colors?.primary ?? "#1a1a2e",
+      accentColor: scraped.colors?.accent ?? "#6c63ff",
+    }),
+    [scraped]
+  );
+
+  const stored = useMemo<Partial<BannerData>>(() => {
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as Partial<BannerData>;
+    } catch {
+      return {};
     }
-  }, []);
+  }, [raw]);
+
+  // Unsaved keystrokes win, then anything already saved, then scraped defaults.
+  const banner: BannerData = { ...defaults, ...stored, ...(draft ?? {}) };
 
   function handleChange(field: keyof BannerData, value: string) {
     setSaved(false);
-    setBanner((prev) => ({ ...prev, [field]: value }));
+    setDraft((prev) => ({ ...(prev ?? {}), [field]: value }));
   }
 
   function handleSave() {
-    sessionStorage.setItem("adcraft_banner", JSON.stringify(banner));
+    bannerStore.write(banner);
+    setDraft(null);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }

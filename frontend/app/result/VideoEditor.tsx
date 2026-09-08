@@ -1,7 +1,8 @@
 "use client";
-import { useState, useRef } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import "./editor.css";
 import type { VideoResult } from "@/lib/api";
+import { bannerStore, type BannerData } from "@/lib/clientStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,23 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
   const [saved, setSaved] = useState(false);
   const [globalSaved, setGlobalSaved] = useState(false);
 
+  // The banner lives in a store shared with the result page's Bottom Banner
+  // panel, so the two stay in step instead of silently diverging.
+  const bannerRaw = useSyncExternalStore(
+    bannerStore.subscribe,
+    bannerStore.getSnapshot,
+    bannerStore.getServerSnapshot
+  );
+
+  const storedBanner = useMemo<Partial<BannerData>>(() => {
+    if (!bannerRaw) return {};
+    try {
+      return JSON.parse(bannerRaw) as Partial<BannerData>;
+    } catch {
+      return {};
+    }
+  }, [bannerRaw]);
+
   const [edits, setEdits] = useState<Edits>({
     headline:     script.headline,
     subtext:      script.subtext,
@@ -72,6 +90,9 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
     },
   });
 
+  // Saved banner values take precedence over this component's initial state.
+  const banner = { ...edits.banner, ...storedBanner };
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function set<K extends keyof Edits>(key: K, value: Edits[K]) {
@@ -81,7 +102,17 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
 
   function setBanner(field: keyof Edits["banner"], value: string) {
     setSaved(false);
-    setEdits((e) => ({ ...e, banner: { ...e.banner, [field]: value } }));
+    const next = { ...banner, [field]: value };
+    setEdits((e) => ({ ...e, banner: next }));
+    // Publish immediately so the result page's panel reflects it.
+    bannerStore.write({
+      companyName:  next.companyName,
+      phone:        next.phone,
+      address:      next.address,
+      website:      next.website,
+      primaryColor: edits.primaryColor,
+      accentColor:  edits.accentColor,
+    });
   }
 
   function handleApply() {
@@ -222,22 +253,22 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
           </div>
           <div className="ve-panel-body">
             <VeField label="Company Name" id="ve-banner-company">
-              <input className="ve-input" value={edits.banner.companyName}
+              <input className="ve-input" value={banner.companyName}
                 placeholder="Nike, Inc."
                 onChange={(e) => setBanner("companyName", e.target.value)} />
             </VeField>
             <VeField label="Phone Number" id="ve-banner-phone">
-              <input className="ve-input" value={edits.banner.phone}
+              <input className="ve-input" value={banner.phone}
                 placeholder="+1 (800) 555-0100"
                 onChange={(e) => setBanner("phone", e.target.value)} />
             </VeField>
             <VeField label="Address" id="ve-banner-address">
-              <input className="ve-input" value={edits.banner.address}
+              <input className="ve-input" value={banner.address}
                 placeholder="One Bowerman Drive, OR"
                 onChange={(e) => setBanner("address", e.target.value)} />
             </VeField>
             <VeField label="Website" id="ve-banner-website">
-              <input className="ve-input" value={edits.banner.website}
+              <input className="ve-input" value={banner.website}
                 placeholder="nike.com"
                 onChange={(e) => setBanner("website", e.target.value)} />
             </VeField>
@@ -248,7 +279,7 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
   }
 
   const showBanner = activeTab === "banner" && (
-    edits.banner.companyName || edits.banner.phone || edits.banner.address || edits.banner.website
+    banner.companyName || banner.phone || banner.address || banner.website
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -326,18 +357,18 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
                   style={{ background: edits.primaryColor }}
                 >
                   <span className="ve-banner-company">
-                    {edits.banner.companyName}
+                    {banner.companyName}
                   </span>
                   <div className="ve-banner-contacts">
-                    {edits.banner.phone   && <span>📞 {edits.banner.phone}</span>}
-                    {edits.banner.address && <span>📍 {edits.banner.address}</span>}
+                    {banner.phone   && <span>📞 {banner.phone}</span>}
+                    {banner.address && <span>📍 {banner.address}</span>}
                   </div>
-                  {edits.banner.website && (
+                  {banner.website && (
                     <span
                       className="ve-banner-pill"
                       style={{ background: edits.accentColor }}
                     >
-                      {edits.banner.website}
+                      {banner.website}
                     </span>
                   )}
                 </div>

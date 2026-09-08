@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { videoFileUrl, type VideoResult, type AdScript } from "@/lib/api";
+import { resultStore } from "@/lib/clientStore";
 import BottomBanner from "./BottomBanner";
 import VideoEditor from "./VideoEditor";
 
@@ -19,16 +20,36 @@ const SCRIPT_FIELDS: Array<{ key: keyof AdScript; label: string }> = [
 
 export default function ResultPage() {
   const router = useRouter();
-  const [result, setResult] = useState<VideoResult | null>(null);
-  const [videoSrc, setVideoSrc] = useState("");
   const [editing, setEditing] = useState(false);
 
+  // Read from an external store rather than setState-in-effect, which React
+  // flags as a cascading render.
+  const raw = useSyncExternalStore(
+    resultStore.subscribe,
+    resultStore.getSnapshot,
+    resultStore.getServerSnapshot
+  );
+
+  const result = useMemo<VideoResult | null>(() => {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as VideoResult;
+    } catch {
+      return null;
+    }
+  }, [raw]);
+
+  const videoSrc = result ? videoFileUrl(result.video_url) : "";
+
+  // Nothing to show: send them back to the generator.
+  //
+  // Read the store directly rather than trusting `raw` here. During hydration
+  // useSyncExternalStore returns the SERVER snapshot (always null), so keying
+  // the redirect off `raw` bounced people away from a perfectly good result
+  // before the client snapshot was ever applied. This effect runs after mount,
+  // where getSnapshot() reflects real sessionStorage.
   useEffect(() => {
-    const raw = sessionStorage.getItem("adcraft_result");
-    if (!raw) { router.replace("/generate"); return; }
-    const data: VideoResult = JSON.parse(raw);
-    setResult(data);
-    setVideoSrc(videoFileUrl(data.video_url));
+    if (resultStore.getSnapshot() === null) router.replace("/generate");
   }, [router]);
 
   if (!result) {

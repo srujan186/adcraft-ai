@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { MENUS, type NavLink as NavLinkT } from "./nav-data";
 import NavIcon from "./NavIcon";
+import MobileNav from "./MobileNav";
 
 const OPEN_DELAY = 90;
 const CLOSE_DELAY = 160;
@@ -27,7 +28,12 @@ export default function SiteHeader() {
     timer.current = setTimeout(() => setOpenId(null), CLOSE_DELAY);
   };
 
-  const closeNow = useCallback(() => { clear(); setOpenId(null); }, []);
+  // Inlines the timer clear rather than closing over `clear`, which is a fresh
+  // function each render and would defeat the memoization.
+  const closeNow = useCallback(() => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    setOpenId(null);
+  }, []);
 
   // Close on outside click, and on Escape (returning focus to the trigger).
   useEffect(() => {
@@ -101,12 +107,10 @@ export default function SiteHeader() {
           </nav>
 
           <div className="nav-actions">
-            <Link className="btn btn-ghost btn-sm" href="/generate" onClick={closeNow}>
-              Sign in
-            </Link>
             <Link className="btn btn-primary btn-sm" href="/generate" onClick={closeNow}>
               Create an ad
             </Link>
+            <MobileNav />
           </div>
         </div>
       </div>
