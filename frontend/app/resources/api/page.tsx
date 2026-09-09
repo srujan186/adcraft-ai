@@ -127,10 +127,10 @@ function MethodPill({ method }: { method: "GET" | "POST" }) {
 export default function ApiPage() {
   return (
     <>
-      <section className="section" style={{ paddingBottom: "2rem" }}>
+      <section className="page-hero">
         <div className="container container-narrow">
           <span className="eyebrow">Developers</span>
-          <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.1rem)" }}>
+          <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.4rem)" }}>
             API reference
           </h1>
           <p className="lead" style={{ marginTop: "1rem" }}>
@@ -149,7 +149,7 @@ export default function ApiPage() {
         </div>
       </section>
 
-      <section className="section" style={{ paddingTop: 0 }}>
+      <section className="section">
         <div className="container container-narrow">
           <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
             {ENDPOINTS.map((ep) => (

@@ -1,14 +1,24 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { MENUS, type NavLink as NavLinkT } from "./nav-data";
 import NavIcon from "./NavIcon";
 import MobileNav from "./MobileNav";
+
+// Menu id -> the route prefixes that belong to it. "product" fans out to two
+// route trees, so this can't be derived from the id alone.
+const SECTION_ROUTES: Record<string, string[]> = {
+  product: ["/features", "/solutions"],
+  industries: ["/industries"],
+  resources: ["/resources"],
+};
 
 const OPEN_DELAY = 90;
 const CLOSE_DELAY = 160;
 
 export default function SiteHeader() {
+  const pathname = usePathname();
   const [openId, setOpenId] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -84,7 +94,11 @@ export default function SiteHeader() {
                 type="button"
                 ref={(el) => { triggers.current[m.id] = el; }}
                 id={`nav-trigger-${m.id}`}
-                className={`nav-trigger${openId === m.id ? " open" : ""}`}
+                className={`nav-trigger${openId === m.id ? " open" : ""}${
+                  (SECTION_ROUTES[m.id] ?? []).some((r) => pathname.startsWith(r))
+                    ? " active"
+                    : ""
+                }`}
                 aria-expanded={openId === m.id}
                 aria-haspopup="true"
                 aria-controls={`nav-panel-${m.id}`}

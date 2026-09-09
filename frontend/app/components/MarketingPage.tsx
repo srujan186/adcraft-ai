@@ -11,23 +11,23 @@ const STEPS = [
 export default function MarketingPage({ content }: { content: MarketingContent }) {
   return (
     <>
-      {/* Hero */}
-      <section className="section" style={{ paddingBottom: "2rem" }}>
+      {/* Hero — dark block off the top, white body below it */}
+      <section className="page-hero">
         <div className="container container-narrow">
           <Reveal>
             <span className="eyebrow">{content.eyebrow}</span>
-            <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.1rem)" }}>
+            <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.4rem)" }}>
               {content.title}
             </h1>
             <p className="lead" style={{ marginTop: "1rem" }}>{content.lead}</p>
           </Reveal>
 
           <Reveal delay={80}>
-            <div style={{ display: "flex", gap: "0.75rem", marginTop: "2rem", flexWrap: "wrap" }}>
-              <Link href="/generate" className="btn btn-primary btn-lg">
-                🎬 Generate your ad
+            <div className="page-hero-actions">
+              <Link href="/generate" className="btn btn-lime btn-lg">
+                Generate your ad
               </Link>
-              <Link href="/#how-it-works" className="btn btn-secondary btn-lg">
+              <Link href="/#how-it-works" className="btn btn-glass btn-lg">
                 See how it works
               </Link>
             </div>
@@ -36,7 +36,7 @@ export default function MarketingPage({ content }: { content: MarketingContent }
       </section>
 
       {/* Body */}
-      <section className="section" style={{ paddingTop: "1rem" }}>
+      <section className="section">
         <div className="container">
           <Reveal>
             <p className="lead" style={{ maxWidth: 760, marginBottom: "3rem" }}>
@@ -99,22 +99,26 @@ export default function MarketingPage({ content }: { content: MarketingContent }
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="section section-dark">
+      {/* CTA — an inset panel, not a full-bleed band: the footer is already
+          dark, and two adjoining dark bands read as one shapeless block. */}
+      <section className="section">
         <div className="container">
           <Reveal>
-            <div className="section-head center" style={{ marginBottom: "2rem" }}>
-              <h2 className="h2" style={{ color: "#fff" }}>Try it on your own site</h2>
-              <p className="lead" style={{ color: "rgba(255,255,255,0.65)", marginTop: "0.75rem" }}>
-                Free while in beta. No account, no card.
+            <div className="cta-panel">
+              <h2 className="h2 cta-title">
+                Try it on <em>your own site</em>
+              </h2>
+              <p className="cta-sub" style={{ marginBottom: "2.25rem" }}>
+                Free while in beta. No account, no card, no watermark on the render.
               </p>
-            </div>
-          </Reveal>
-          <Reveal>
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <Link href="/generate" className="btn btn-primary btn-lg">
-                🚀 Get started free
-              </Link>
+              <div className="cta-actions">
+                <Link href="/generate" className="btn btn-lime btn-lg">
+                  Get started free
+                </Link>
+                <Link href="/#how-it-works" className="btn btn-glass btn-lg">
+                  See how it works
+                </Link>
+              </div>
             </div>
           </Reveal>
         </div>

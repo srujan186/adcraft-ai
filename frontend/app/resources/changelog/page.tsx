@@ -61,10 +61,10 @@ const ENTRIES: Entry[] = [
 export default function ChangelogPage() {
   return (
     <>
-      <section className="section" style={{ paddingBottom: "2rem" }}>
+      <section className="page-hero">
         <div className="container container-narrow">
           <span className="eyebrow">Changelog</span>
-          <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.1rem)" }}>
+          <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.4rem)" }}>
             What&apos;s shipped
           </h1>
           <p className="lead" style={{ marginTop: "1rem" }}>
@@ -73,7 +73,7 @@ export default function ChangelogPage() {
         </div>
       </section>
 
-      <section className="section" style={{ paddingTop: 0 }}>
+      <section className="section">
         <div className="container container-narrow">
           <div className="timeline">
             {ENTRIES.map((e, i) => (

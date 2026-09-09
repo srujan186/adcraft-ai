@@ -42,10 +42,10 @@ const GUIDES = [
 export default function HelpPage() {
   return (
     <>
-      <section className="section" style={{ paddingBottom: "2rem" }}>
+      <section className="page-hero">
         <div className="container container-narrow">
           <span className="eyebrow">Help centre</span>
-          <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.1rem)" }}>
+          <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.4rem)" }}>
             Questions & answers
           </h1>
           <p className="lead" style={{ marginTop: "1rem" }}>
@@ -54,7 +54,7 @@ export default function HelpPage() {
         </div>
       </section>
 
-      <section className="section" style={{ paddingTop: 0 }}>
+      <section className="section">
         <div className="container container-narrow">
           <Faq items={FAQ} />
         </div>

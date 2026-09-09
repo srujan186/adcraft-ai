@@ -49,12 +49,16 @@ export async function scrapeUrl(url: string): Promise<ScrapeResult> {
 export async function generateVideo(
   url: string,
   adStyle: AdStyle,
-  duration: 15 | 30
+  duration: 15 | 30,
+  // Lets the generation overlay's close button actually abort the render
+  // rather than just hiding itself while the request keeps running.
+  signal?: AbortSignal
 ): Promise<VideoResult> {
   const res = await fetch(`${BASE}/api/generate/video`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, ad_style: adStyle, duration }),
+    signal,
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.detail ?? "Video generation failed");

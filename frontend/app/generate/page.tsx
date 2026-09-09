@@ -11,20 +11,28 @@ function FormFallback() {
 
 export default function GeneratePage() {
   return (
-    <section className="section">
-      <div className="container container-narrow">
-        <div className="section-head" style={{ marginBottom: "2rem" }}>
-          <span className="eyebrow">🚀 AI ad generator</span>
-          <h1 className="h2">Create your video ad</h1>
-          <p className="lead" style={{ marginTop: "0.6rem" }}>
-            Paste your business URL below. We&apos;ll handle everything else.
-          </p>
+    <>
+      <section className="page-hero">
+        <div className="container container-narrow">
+          <div className="section-head" style={{ marginBottom: 0 }}>
+            <span className="eyebrow">AI ad generator</span>
+            <h1 className="h1" style={{ fontSize: "clamp(2rem, 4.4vw, 3.4rem)" }}>
+              Create your video ad
+            </h1>
+            <p className="lead" style={{ marginTop: "1rem" }}>
+              Paste your business URL below. We&apos;ll handle everything else.
+            </p>
+          </div>
         </div>
+      </section>
 
-        <Suspense fallback={<FormFallback />}>
-          <GenerateForm />
-        </Suspense>
-      </div>
-    </section>
+      <section className="section">
+        <div className="container container-narrow">
+          <Suspense fallback={<FormFallback />}>
+            <GenerateForm />
+          </Suspense>
+        </div>
+      </section>
+    </>
   );
 }

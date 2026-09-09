@@ -36,7 +36,7 @@ export default function HeroForm() {
             aria-selected="true"
             className="hero-tab selected"
           >
-            🔗 Via URL
+            Via URL
           </button>
           <button
             type="button"
@@ -46,8 +46,8 @@ export default function HeroForm() {
             disabled
             title="Coming soon — a URL is required for now"
           >
-            🔍 Via business name
-            <span className="badge badge-neutral" style={{ marginLeft: "0.5rem", fontSize: "0.65rem" }}>
+            Via business name
+            <span className="badge badge-glass" style={{ marginLeft: "0.35rem", fontSize: "0.62rem", padding: "0.1rem 0.35rem" }}>
               Soon
             </span>
           </button>
@@ -64,13 +64,13 @@ export default function HeroForm() {
             aria-label="Business website URL"
           />
           <button type="submit" className="btn btn-primary btn-lg" id="hero-submit-btn">
-            Create my ad →
+            Create my ad
           </button>
         </form>
 
         {error && (
           <div className="error-box" style={{ marginTop: "0.85rem" }} id="hero-error">
-            <span>⚠️</span>
+            <span aria-hidden="true">⚠</span>
             <span>{error}</span>
           </div>
         )}

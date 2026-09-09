@@ -104,7 +104,7 @@ export default function MobileNav() {
 
               <Link className="btn btn-primary btn-block" href="/generate" onClick={close}
                     style={{ marginTop: "1.25rem" }}>
-                🎬 Create an ad
+                Create an ad
               </Link>
             </nav>
           </div>

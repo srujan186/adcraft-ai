@@ -84,7 +84,7 @@ useEffect(() => {
 
 ### `backdrop-filter` traps `position: fixed` children
 
-`.site-header` uses `backdrop-filter: blur(14px)`, which makes it a containing
+`.site-header` uses `backdrop-filter: blur(16px)`, which makes it a containing
 block for fixed-position descendants. The mobile drawer rendered inside it was
 clipped to the 68px header instead of filling the viewport.
 
@@ -121,12 +121,59 @@ components. Add an entry there and the route generates itself.
 never fork them. Setting `soon: true` on a link dims it, adds a marker dot, and
 makes the "placeholders" footnote appear automatically.
 
+**Generation overlay** — submitting the generate form mounts
+`app/generate/GeneratingOverlay.tsx`, a full-screen portal (progress on the
+left, a rotating card on the right). The form stays mounted underneath, so
+cancelling returns the user to their existing settings. Its close button and
+Escape call `AbortController.abort()`, which `generateVideo(…, signal)` passes
+to `fetch` — an aborted request is deliberate, so `handleSubmit` returns
+without setting an error. To drive it in Playwright, hold the request open with
+`page.route("**/api/generate/video", lambda route: None)`.
+
 **Client state** — `lib/clientStore.ts` holds sessionStorage-backed stores.
 `bannerStore` is deliberately shared between `BottomBanner.tsx` and the video
 editor's Banner tab; they're two views of one value and previously diverged.
 
-**Styling** — `app/globals.css` only. Tokens on `:root`. Breakpoints at 768px
-and 1024px. Reuse existing classes before writing new ones.
+**Styling** — `app/globals.css` only. Tokens on `:root`. Breakpoints at 768px,
+900px and 1024px. Reuse existing classes before writing new ones.
+
+---
+
+## Design language
+
+Reworked to sit alongside vibe.co: dark indigo hero panels, huge tight display
+type, flat tinted surfaces instead of bordered cards.
+
+- **Palette** — one accent (`--accent` indigo `#4f46e5`) with `--violet` as its
+  gradient partner and `--lime` `#d8f34e` as the single pop colour. Use lime at
+  most once per screen (a highlighted headline word, one CTA). Everything dark
+  is `--ink` `#0a0d18`, never `#000`. `--tint-ice/mint/lavender/butter` are
+  *surfaces* for bento tiles, not accents — don't promote them to text colours.
+- **Type** — `Inter_Tight` for display (`--font-head`), `Inter` for body,
+  `--font-mono` for labels, specs and anything numeric. Headings run tight:
+  `.h1` is -0.042em at up to 5rem. Numbers carry `tabular-nums`.
+- **Chrome** — the header and footer are dark on every page. Don't add a
+  full-bleed `.section-dark` band next to the footer; use the inset
+  `.cta-panel` instead, or the two dark blocks merge into one shapeless mass.
+- **Surfaces** — prefer no border. `.bento-tile`, `.marquee-card`, `.stat`,
+  `.quote-card` and `.script-item` are all borderless tinted blocks. `.card`
+  keeps its hairline for interior pages.
+- **Bento** — `.bento` is a 12-column grid; children take `.b-wide` (7),
+  `.b-mid` (5), `.b-half` (6) or `.b-full` (12). Put the span class on the
+  `<Reveal>` wrapper — that's the grid item, not the `<article>` inside it.
+  `.b-full` flips to a row with the visual trailing the copy.
+- **Texture** — `.grain` adds an inline-SVG noise overlay via `::after`. It sets
+  `isolation: isolate`, so don't put it on an element that needs to escape its
+  own stacking context.
+- **Motion** — `--spring` for interactive feedback, `--transition` for colour
+  changes. Everything animates `transform`/`opacity` only.
+- **Page shape** — every route except `/` opens with `.page-hero`, a dark block
+  with a hard bottom edge, then runs white below it. Only the landing hero
+  fades into the page; repeating that fade everywhere flattens the difference.
+- **Dropdowns** — the mega-panel and mobile drawer are dark. `.mega-col-title`
+  and `.mega-link-icon` are *also* used on light surfaces (`MarketingPage`, the
+  API page), so their dark values are scoped to `.mega-panel` / `.drawer` —
+  don't move those colours back onto the base rule.
 
 ---
 
@@ -148,5 +195,14 @@ cd ../backend && ./venv/Scripts/python.exe <script>.py
 ```
 
 Check 390px as well as desktop: the header nav collapses at 768px and the mobile
-drawer is the only navigation below that. Assert zero console errors. Keep
-throwaway scripts in the scratchpad, never in the repo.
+drawer is the only navigation below that. Assert zero console errors and zero
+horizontal overflow (`scrollWidth - clientWidth`). Keep throwaway scripts in the
+scratchpad, never in the repo.
+
+The desktop mega-menu opens on **hover**, not click — a synthetic `click()` in
+Playwright fires `mouseenter` first, which opens the panel, and the click then
+toggles it straight back shut. Drive it with `page.hover()`.
+
+`/result` reads its data from `sessionStorage["adcraft_result"]` and redirects to
+`/generate` without it. To screenshot it, load any page first, seed the key with
+a `VideoResult`-shaped object (see `lib/api.ts`), then navigate to `/result`.

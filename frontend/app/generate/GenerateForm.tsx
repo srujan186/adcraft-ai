@@ -1,20 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { generateVideo, type AdStyle } from "@/lib/api";
+import GeneratingOverlay from "./GeneratingOverlay";
 
 const STYLES: { key: AdStyle; name: string; emoji: string; desc: string }[] = [
   { key: "modern",  name: "Modern",  emoji: "✨", desc: "Clean, professional, confident" },
   { key: "bold",    name: "Bold",    emoji: "⚡", desc: "High energy, punchy, exciting" },
   { key: "minimal", name: "Minimal", emoji: "◻️", desc: "Simple, elegant, one big idea" },
   { key: "playful", name: "Playful", emoji: "🎉", desc: "Fun, friendly, approachable" },
-];
-
-const STEPS = [
-  { label: "Scraping",  icon: "🔗" },
-  { label: "Scripting", icon: "✍️" },
-  { label: "Building",  icon: "🎬" },
-  { label: "Done",      icon: "✅" },
 ];
 
 const URL_PATTERN = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/.*)?$/i;
@@ -29,6 +23,17 @@ export default function GenerateForm() {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(-1);
   const [error, setError] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Only closes over the ref and setters, so the React Compiler's
+  // preserve-manual-memoization rule stays happy.
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
+    setStep(-1);
+    setError("");
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,21 +48,29 @@ export default function GenerateForm() {
     setError("");
     setLoading(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setStep(0);
     const stepTimer1 = setTimeout(() => setStep(1), 8000);
     const stepTimer2 = setTimeout(() => setStep(2), 20000);
+    const stepTimer3 = setTimeout(() => setStep(3), 32000);
 
     try {
-      const result = await generateVideo(value, style, duration);
+      const result = await generateVideo(value, style, duration, controller.signal);
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
-      setStep(3);
+      clearTimeout(stepTimer3);
       sessionStorage.setItem("adcraft_result", JSON.stringify(result));
       router.push("/result");
     } catch (err: unknown) {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
       setStep(-1);
+
+      // Cancelling is a deliberate act, not a failure — say nothing.
+      if (controller.signal.aborted) return;
 
       let errorMessage =
         err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -71,39 +84,16 @@ export default function GenerateForm() {
 
       setError(errorMessage);
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       setLoading(false);
     }
   }
 
   return (
     <>
-      {/* Progress stepper — visible while loading */}
-      {loading && (
-        <div className="card" style={{ marginBottom: "1.5rem" }} id="progress-stepper">
-          <p
-            style={{
-              fontSize: "0.85rem",
-              color: "var(--text-muted)",
-              marginBottom: "1.5rem",
-              textAlign: "center",
-            }}
-          >
-            Generating your ad — this usually takes 30–60 seconds
-          </p>
-          <div className="stepper">
-            {STEPS.map((s, i) => (
-              <div
-                key={s.label}
-                className={`step ${step === i ? "active" : step > i ? "done" : ""}`}
-              >
-                <div className="step-icon">{step > i ? "✓" : s.icon}</div>
-                <span className="step-label">{s.label}</span>
-                {i < STEPS.length - 1 && <div className="step-line" />}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Full-screen while the render runs — the form stays mounted beneath so
+          the chosen settings survive a cancel. */}
+      {loading && <GeneratingOverlay step={step} onCancel={cancel} />}
 
       <form onSubmit={handleSubmit} className="card card-pad-lg" id="generate-form">
         {/* URL input */}
@@ -189,7 +179,7 @@ export default function GenerateForm() {
           {loading ? (
             <><span className="spinner" /> Generating ad…</>
           ) : (
-            "🎬 Generate video ad"
+            "Generate video ad"
           )}
         </button>
       </form>

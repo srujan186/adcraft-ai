@@ -108,7 +108,7 @@ export default function ResultPage() {
         {/* Actions */}
         <div style={{ display: "flex", gap: "0.75rem", marginBottom: "2.5rem", flexWrap: "wrap" }}>
           <button id="download-btn" className="btn btn-primary" onClick={handleDownload}>
-            ⬇️ Download MP4
+            Download MP4
           </button>
           <button
             id="edit-video-btn"
@@ -118,7 +118,7 @@ export default function ResultPage() {
             ✏️ Edit video
           </button>
           <Link href="/generate" className="btn btn-secondary" id="create-another-btn">
-            🔄 Create another
+            Create another
           </Link>
         </div>
 
