@@ -20,7 +20,7 @@ const SLIDES = [
   },
   {
     title: "A script written to length",
-    body: "Llama 3.3 70B drafts the voiceover for the exact duration you picked, in the tone you chose.",
+    body: "GPT-OSS 120B drafts the voiceover for the exact duration you picked, in the tone you chose.",
   },
   {
     title: "Narration generated locally",

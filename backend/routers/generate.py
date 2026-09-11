@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from models.generate import GenerateRequest
-from services.script_generator import generate_ad_script
+from models.generate import GenerateRequest, VideoRequest
+from services.script_generator import generate_ad_script, MODEL
 from services.scraper import scrape_business_url
 from services.video_assembler import assemble_video
 import os
@@ -18,10 +18,7 @@ async def generate_script(request: GenerateRequest):
         raise HTTPException(status_code=400, detail="business_name is required")
     if not request.description.strip():
         raise HTTPException(status_code=400, detail="description is required")
-    if request.ad_style not in ["modern", "bold", "minimal", "playful"]:
-        raise HTTPException(status_code=400, detail="invalid ad_style")
-    if request.duration not in [15, 30]:
-        raise HTTPException(status_code=400, detail="duration must be 15 or 30")
+    # ad_style and duration are enforced by the model — see models/generate.py.
 
     try:
         script = await generate_ad_script(
@@ -39,7 +36,7 @@ async def generate_script(request: GenerateRequest):
                     "business_name": request.business_name,
                     "ad_style":      request.ad_style,
                     "duration":      request.duration,
-                    "model_used":    "llama-3.3-70b-versatile"
+                    "model_used":    MODEL
                 }
             }
         }
@@ -48,11 +45,11 @@ async def generate_script(request: GenerateRequest):
 
 
 @router.post("/generate/from-url")
-async def generate_from_url(request: dict):
+async def generate_from_url(request: VideoRequest):
     """Scrape URL → generate script only (no video yet)"""
-    url      = request.get("url", "")
-    ad_style = request.get("ad_style", "modern")
-    duration = request.get("duration", 15)
+    url      = request.url.strip()
+    ad_style = request.ad_style
+    duration = request.duration
 
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
@@ -86,10 +83,10 @@ async def generate_from_url(request: dict):
 
 
 @router.post("/generate/video")
-async def generate_video(request: dict):
-    url      = request.get("url", "")
-    ad_style = request.get("ad_style", "modern")
-    duration = request.get("duration", 15)
+async def generate_video(request: VideoRequest):
+    url      = request.url.strip()
+    ad_style = request.ad_style
+    duration = request.duration
 
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
@@ -152,15 +149,33 @@ async def serve_video(filename: str):
     """
     GET /api/output/{filename}
     Serves the generated video file to the frontend.
-    """
-    BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    output_path = os.path.join(BASE_DIR, "output", filename)
 
-    if not os.path.exists(output_path):
+    This handler shadows the StaticFiles mount that used to sit on the same
+    path, so it has to do the containment checking StaticFiles did for us:
+    strip any directory component, allow only .mp4, and confirm the resolved
+    path is still inside output/ before serving it.
+    """
+    BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    output_dir = os.path.realpath(os.path.join(BASE_DIR, "output"))
+
+    # basename() drops "../" and, on Windows, backslash segments the router
+    # does not treat as separators but os.path.join does.
+    name = os.path.basename(filename)
+
+    if not name.lower().endswith(".mp4"):
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    output_path = os.path.realpath(os.path.join(output_dir, name))
+
+    # Belt and braces: catches symlinks pointing out of the directory.
+    if not output_path.startswith(output_dir + os.sep):
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if not os.path.isfile(output_path):
         raise HTTPException(status_code=404, detail="Video not found")
 
     return FileResponse(
         output_path,
         media_type="video/mp4",
-        filename=filename
+        filename=name
     )

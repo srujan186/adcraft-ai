@@ -101,10 +101,12 @@ config lints the project). `npx eslint app lib` is the targeted equivalent.
 
 - `NEXT_PUBLIC_API_URL` — backend base URL, defaults to `http://localhost:8000`.
 
-`backend/config/settings.py` still declares `ANTHROPIC_API_KEY` and
-`CREATOMATE_API_KEY`. **Both are dead** — nothing reads them. The real LLM is
-Groq (`llama-3.3-70b-versatile` in `services/script_generator.py`). Don't wire
-anything new to those two without asking us.
+`backend/config/` has been deleted. It declared `ANTHROPIC_API_KEY`,
+`CREATOMATE_API_KEY` and six other settings, and nothing in the repo imported
+the module — all eight were dead. The LLM is Groq (`openai/gpt-oss-120b`, the
+`MODEL` constant in `services/script_generator.py`). Every real setting is read
+with `os.getenv` at its point of use: `ALLOWED_ORIGINS` in `server.py`,
+`GROQ_API_KEY` in `script_generator.py`, `PEXELS_API_KEY` in `pexels.py`.
 
 ---
 
@@ -121,7 +123,7 @@ Get these wrong and we ship false claims to Users.
 | Ad styles | modern, bold, minimal, playful | validated in `routers/generate.py` |
 | Narration voices | 4 (Kokoro, local) | `services/tts.py` `VOICES` |
 | Music beds | 5 mp3 files | `backend/music/` |
-| LLM | Llama 3.3 70B via Groq | `services/script_generator.py` |
+| LLM | GPT-OSS 120B via Groq | `services/script_generator.py` `MODEL` |
 
 We advertised "1080p" once by mistake and it shipped to the landing page.
 **If you state a spec on a User-facing page, read it out of the code first.**

@@ -32,9 +32,9 @@ export const FEATURES: MarketingContent[] = [
     slug: "ai-script",
     eyebrow: "Feature",
     title: "AI script writing",
-    lead: "Llama 3.3 70B writes to your brand, your style and your exact ad length.",
+    lead: "GPT-OSS 120B writes to your brand, your style and your exact ad length.",
     metaDescription:
-      "Generate structured ad scripts — headline, subtext, call to action and voiceover — with Llama 3.3 70B via Groq.",
+      "Generate structured ad scripts — headline, subtext, call to action and voiceover — with GPT-OSS 120B via Groq.",
     intro:
       "The script model receives your scraped brand data along with the style and duration you chose, and returns a structured script rather than a paragraph. Each field maps to something the renderer uses, which is why the output is consistent enough to drop straight into a video.",
     points: [

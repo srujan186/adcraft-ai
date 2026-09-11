@@ -32,13 +32,16 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: "banner",    icon: "🏷️", label: "Banner" },
 ];
 
+// The ids must match STYLE_KEYWORDS in backend/services/music.py — the backend
+// resolves them to one of the five beds in backend/music/. Offering ids the
+// backend doesn't know ("cinematic", "chill", "playful") meant three of these
+// could never resolve to the bed they named.
 const MUSIC_OPTIONS = [
-  { id: "upbeat",       icon: "⚡", name: "Upbeat",       desc: "Energetic & fast" },
-  { id: "cinematic",    icon: "🎬", name: "Cinematic",    desc: "Epic orchestral" },
-  { id: "corporate",    icon: "💼", name: "Corporate",    desc: "Clean & professional" },
-  { id: "chill",        icon: "🌊", name: "Chill",        desc: "Relaxed & ambient" },
-  { id: "inspirational",icon: "✨", name: "Inspire",      desc: "Motivational" },
-  { id: "playful",      icon: "🎠", name: "Playful",      desc: "Fun & quirky" },
+  { id: "upbeat",        icon: "⚡", name: "Upbeat",    desc: "Energetic & fast" },
+  { id: "dramatic",      icon: "🎬", name: "Cinematic", desc: "Epic orchestral" },
+  { id: "corporate",     icon: "💼", name: "Corporate", desc: "Clean & professional" },
+  { id: "calm",          icon: "🌊", name: "Chill",     desc: "Relaxed & ambient" },
+  { id: "inspirational", icon: "✨", name: "Inspire",   desc: "Motivational" },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────

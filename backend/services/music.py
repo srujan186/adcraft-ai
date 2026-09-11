@@ -14,7 +14,9 @@ MUSIC_DIR = os.path.join(BASE_DIR, "music")
 # e.g. "nastelbom-upbeat-501716.mp3" matches "upbeat"
 STYLE_KEYWORDS = {
     "upbeat":        "upbeat",
-    "calm":          "calm",
+    # The calm bed is named "...-soft-background-music-...", so match "soft".
+    # Mapping this to "calm" matched no file and silently fell back to upbeat.
+    "calm":          "soft",
     "corporate":     "corporate",
     "dramatic":      "dramatic",
     "inspirational": "inspirational",

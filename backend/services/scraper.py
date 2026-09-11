@@ -2,6 +2,7 @@
 # ONE job: visit a URL, extract brand information
 # Complete file — all functions in correct order
 
+import asyncio
 import httpx
 import re
 import urllib.request
@@ -391,6 +392,13 @@ def extract_colors_from_stylesheets(soup, base_url: str) -> list:
 
     for css_url in stylesheets[:2]:
         try:
+            # urlopen natively supports file:// and ftp:// — unlike httpx — so a
+            # page linking <link rel="stylesheet" href="file:///..."> would
+            # otherwise reach a local file read. Only http(s) is a stylesheet.
+            if urlparse(css_url).scheme not in ("http", "https"):
+                print(f"  ⚠️  Skipping non-http stylesheet: {css_url[:60]}")
+                continue
+
             print(f"  📄 Fetching CSS: {css_url[:60]}")
             with urllib.request.urlopen(css_url, timeout=5) as response:
                 css_text = response.read().decode('utf-8', errors='ignore')
@@ -713,6 +721,21 @@ def parse_html(html: str, url: str) -> dict:
 # Two methods: fast (httpx) and powerful (Playwright)
 # ═══════════════════════════════════════════════════════
 
+async def _parse_html_off_loop(html: str, url: str) -> dict:
+    """
+    parse_html is CPU-bound (BeautifulSoup over the whole document) and can
+    additionally make *blocking* network calls: when no colours are found
+    inline it falls through to extract_colors_from_stylesheets, which uses
+    urllib.request.urlopen (up to 2 stylesheets, 5s socket timeout each).
+
+    Both call sites are inside async handlers, so running it inline stalled the
+    whole event loop — every other in-flight request with it. Hand it to the
+    default executor instead.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, parse_html, html, url)
+
+
 async def scrape_with_httpx(url: str) -> dict:
     """
     Fast scraper using httpx.
@@ -769,12 +792,7 @@ async def scrape_with_httpx(url: str) -> dict:
         )
     
     print(f"  📄 httpx got {len(html)} chars")
-    result = parse_html(html, url)
-    print(f"  📄 parse_html returned: {type(result)}")
-    print(f"  📄 colors type: {type(result.get('colors'))}")
-    return result
-
-    return parse_html(html, url)
+    return await _parse_html_off_loop(html, url)
 
 async def scrape_with_playwright(url: str) -> dict:
     """
@@ -886,7 +904,7 @@ async def scrape_with_playwright(url: str) -> dict:
             )
 
         print(f"  📄 Playwright got {len(html)} chars of HTML")
-        return parse_html(html, url)
+        return await _parse_html_off_loop(html, url)
 
     except Exception as e:
         raise Exception(f"Playwright failed: {str(e)}")

@@ -13,7 +13,7 @@ const STEPS = [
   {
     icon: "✍️",
     title: "AI writes the script",
-    desc: "Llama 3.3 70B drafts a voiceover tuned to your brand, your chosen style and your exact ad length.",
+    desc: "GPT-OSS 120B drafts a voiceover tuned to your brand, your chosen style and your exact ad length.",
   },
   {
     icon: "🎬",

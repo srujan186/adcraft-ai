@@ -1,5 +1,5 @@
 from fastapi import APIRouter , HTTPException
-from models.scrape import ScrapeRequest , ScrapeResponse
+from models.scrape import ScrapeRequest
 from services.scraper import scrape_business_url
 
 router = APIRouter(prefix="/api", tags=["scrape"])
@@ -41,41 +41,3 @@ async def scrape_url(request: ScrapeRequest):
             user_message = f"Could not analyze this URL: {error_msg}"
 
         raise HTTPException(status_code=500, detail=user_message)
-
-
-@router.post("/scrape/debug")
-async def debug_scrape(request: ScrapeRequest):
-    """
-    Temporary debug endpoint.
-    Shows raw HTML so we can see what the site is actually returning.
-    DELETE THIS before production.
-    """
-    from services.scraper import clean_url
-    import httpx
-
-    url = clean_url(request.url)
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.5",
-    }
-
-    async with httpx.AsyncClient(
-        timeout=15.0,
-        follow_redirects=True,
-        headers=headers
-    ) as client:
-        response = await client.get(url)
-
-    return {
-        "status_code": response.status_code,
-        "url_reached": str(response.url),
-        "html_length": len(response.text),
-        "first_500_chars": response.text[:500],
-        "headers_received": dict(response.headers)
-    }

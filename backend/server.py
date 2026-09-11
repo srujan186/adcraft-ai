@@ -8,9 +8,10 @@ if sys.platform == "win32":
 import multiprocessing
 multiprocessing.freeze_support()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import os
 
@@ -39,15 +40,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Validation errors ─────────────────────────────────────────────────────────
+# FastAPI's default 422 body puts a *list of objects* in `detail`. Every other
+# error this API returns puts a plain string there, and the frontend does
+# `throw new Error(json.detail)` — which would render "[object Object]".
+# Flatten it so one shape holds across the whole API.
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    parts = []
+    for err in exc.errors():
+        # loc is like ("body", "duration") — the field name is the useful part.
+        field = ".".join(str(x) for x in err.get("loc", []) if x != "body")
+        msg   = err.get("msg", "invalid value")
+        parts.append(f"{field}: {msg}" if field else msg)
+
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "; ".join(parts) or "Invalid request."},
+    )
+
+
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(scrape_router)
 app.include_router(generate_router)
 
-# ── Static video files ────────────────────────────────────────────────────────
-# Serve generated MP4s at /api/output/<filename>
+# ── Output directory ──────────────────────────────────────────────────────────
+# Generated MP4s are served by GET /api/output/{filename} in routers/generate.py.
+# A StaticFiles mount used to sit here too, but include_router() runs first so
+# the router always won and the mount was dead — while silently implying the
+# path-traversal checking StaticFiles does. The router handler does its own now.
 _output_dir = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(_output_dir, exist_ok=True)
-app.mount("/api/output", StaticFiles(directory=_output_dir), name="output")
 
 # ── Health / root ─────────────────────────────────────────────────────────────
 @app.get("/api/health")

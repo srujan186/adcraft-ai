@@ -1,5 +1,12 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
+
+# The allowed values, in one place. These used to live only as comments below
+# and as hand-written `if` checks in routers/generate.py, which meant the two
+# generate routes that took a bare dict enforced nothing at all.
+AdStyle  = Literal["modern", "bold", "minimal", "playful"]
+Duration = Literal[15, 30]
+
 
 class GenerateRequest(BaseModel):
     """
@@ -14,15 +21,29 @@ class GenerateRequest(BaseModel):
     colors:        Optional[dict] = {}
 
     # User choices from the generate page
-    ad_style:  Optional[str] = "modern"
+    ad_style: AdStyle = "modern"
     # modern   = clean, professional, confident
     # bold     = high energy, punchy, exciting
     # minimal  = simple, elegant, one big idea
     # playful  = fun, friendly, approachable
 
-    duration: Optional[int] = 15
+    duration: Duration = 15
     # 15 = 15 second ad
     # 30 = 30 second ad
+
+
+class VideoRequest(BaseModel):
+    """
+    What the frontend sends to /api/generate/video and /api/generate/from-url.
+
+    Both routes used to take a bare `dict`, so ad_style and duration were never
+    checked — duration in particular reaches ffmpeg as an argv element and is
+    interpolated into an audio filter string, so a bad value failed deep in the
+    pipeline instead of at the door.
+    """
+    url:      str
+    ad_style: AdStyle = "modern"
+    duration: Duration = 15
 
 
 class AdScript(BaseModel):

@@ -9,7 +9,12 @@ load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-MODEL = "llama-3.3-70b-versatile"
+# Groq retired llama-3.3-70b-versatile (404 model_not_found). Chosen by
+# benchmarking the candidates this key can reach against the real build_prompt():
+# gpt-oss-120b held ~73% of the 30s word target (qwen3.8-27b sat at 43% — always
+# ~35 words regardless of duration, i.e. half a 30s ad is silence).
+# Costs ~3.6k tokens/script against an 8k TPM ceiling: roughly 2 scripts/minute.
+MODEL = "openai/gpt-oss-120b"
 
 STYLE_DESCRIPTIONS = {
     "modern": (
@@ -265,7 +270,7 @@ async def generate_ad_script(
 
     Flow:
     1. Build prompt from brand data
-    2. Send to Groq API (Llama 3.3 70B)
+    2. Send to Groq API (see MODEL)
     3. Parse JSON response
     4. Validate all fields
     5. Return clean script dictionary
@@ -319,7 +324,13 @@ async def generate_ad_script(
                 }
             ],
             temperature=0.75,
-            max_tokens=1200,
+            # gpt-oss models emit reasoning tokens *before* the answer, and
+            # those count against this budget. At 1200 the JSON came back
+            # truncated or empty, which parse_ai_response treats as fatal.
+            max_tokens=4000,
+            # Groq's JSON mode. parse_ai_response still runs — this just stops
+            # it being the only thing between us and a 500.
+            response_format={"type": "json_object"},
         )
 
 
