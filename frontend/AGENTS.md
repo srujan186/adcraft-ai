@@ -130,9 +130,34 @@ to `fetch` — an aborted request is deliberate, so `handleSubmit` returns
 without setting an error. To drive it in Playwright, hold the request open with
 `page.route("**/api/generate/video", lambda route: None)`.
 
-**Client state** — `lib/clientStore.ts` holds sessionStorage-backed stores.
-`bannerStore` is deliberately shared between `BottomBanner.tsx` and the video
-editor's Banner tab; they're two views of one value and previously diverged.
+**The result page IS the editor** — `/result` renders `VideoEditor` directly,
+full-screen and dark (`.ve-shell` rescopes the global light tokens for its own
+subtree, so the ~430 existing rules flip theme without being rewritten). There
+is no read-only summary screen and no "Edit video" button any more;
+`BottomBanner.tsx` was its panel and has been deleted.
+
+**Scene thumbnails come from the MP4, not the backend.** The renderer's three
+screenshots live in `backend/temp/` and are never served, so `useSceneThumbs`
+seeks a detached `<video>` to each scene mid-point and draws it to a canvas.
+That needs `crossOrigin="anonymous"` on the element *and* the CORS header the
+API already sends — without both, `drawImage` taints the canvas and
+`toDataURL` throws (the code falls back to a numbered placeholder tile).
+
+**Scene images** — `ScenePicker.tsx` offers upload or Pexels search
+(`GET /api/media/photos`, a thin server-side proxy that keeps the key off the
+client). Uploads are downscaled to 960px JPEG data URLs *before* they reach
+`scenesStore`; a raw phone photo would blow sessionStorage's quota and
+`safeSet` would swallow the failure, so the override would vanish on reload.
+
+**Client state** — `lib/clientStore.ts` holds sessionStorage-backed stores:
+`resultStore`, `bannerStore` and `scenesStore`.
+
+**Save & re-render** posts to `POST /api/generate/rerender` with the edited
+script, colours and one `scene_images` entry per scene (`""` = keep that scene,
+and the backend re-captures it from the site). On success it writes the new
+`video_url` into `resultStore`, which flows back down as a fresh `videoSrc`
+without remounting the editor, so edit state survives. Takes 20-45s, so it puts
+up `.ve-rerender-scrim`.
 
 **Styling** — `app/globals.css` only. Tokens on `:root`. Breakpoints at 768px,
 900px and 1024px. Reuse existing classes before writing new ones.

@@ -38,7 +38,7 @@ export const FAQ: FaqItem[] = [
   },
   {
     q: "Do my edits change the downloaded video?",
-    a: "Not yet, and it is worth being clear about. The editor currently saves your changes in the browser and previews them, but re-rendering the MP4 with those edits is not wired up — the Download button still gives you the original render. That connection is the next thing being built.",
+    a: "Yes. “Save & re-render” rebuilds the MP4 with your headline, subtext, call to action, voiceover script, music bed, brand colours and any scene images you swapped in. It takes about half a minute — narration is synthesised again and the video is re-encoded — and Download then gives you the new file. Scenes you did not replace are re-captured from your site, so the ad stays current.",
   },
   {
     q: "What if it cannot read my site?",

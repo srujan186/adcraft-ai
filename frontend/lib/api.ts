@@ -7,6 +7,8 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export interface ScrapeResult {
   business_name: string;
   description: string;
+  /** The site the ad was built from — needed to re-render un-swapped scenes. */
+  url?: string;
   tagline?: string;
   logo_url?: string;
   colors?: { primary: string; secondary: string; accent: string };
@@ -32,6 +34,16 @@ export interface VideoResult {
 }
 
 export type AdStyle = "modern" | "bold" | "minimal" | "playful";
+
+/** A stock photo from the editor's scene picker. */
+export interface StockPhoto {
+  id: number;
+  alt: string;
+  author: string;
+  author_url: string;
+  thumb: string;
+  full: string;
+}
 
 // ─── API Calls ───────────────────────────────────────────────────────────────
 
@@ -63,6 +75,53 @@ export async function generateVideo(
   const json = await res.json();
   if (!res.ok) throw new Error(json.detail ?? "Video generation failed");
   return json.data as VideoResult;
+}
+
+export interface RerenderPayload {
+  business_name: string;
+  duration: 15 | 30;
+  url?: string;
+  logo_url?: string;
+  colors?: { primary: string; secondary: string; accent: string };
+  script: {
+    headline: string;
+    subtext: string;
+    cta: string;
+    voiceover: string;
+    music_style: string;
+    scene_description: string;
+  };
+  /** One entry per scene; "" means "use the live site for this one". */
+  scene_images?: string[];
+}
+
+/** Re-runs assembly against edited copy. No scrape, no LLM — 20-45s. */
+export async function rerenderVideo(
+  payload: RerenderPayload,
+  signal?: AbortSignal
+): Promise<{ video_url: string; render_id: string }> {
+  const res = await fetch(`${BASE}/api/generate/rerender`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.detail ?? "Re-render failed");
+  return json.data as { video_url: string; render_id: string };
+}
+
+export async function searchPhotos(
+  query: string,
+  signal?: AbortSignal
+): Promise<StockPhoto[]> {
+  const res = await fetch(
+    `${BASE}/api/media/photos?query=${encodeURIComponent(query)}&per_page=18`,
+    { signal }
+  );
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.detail ?? "Image search failed");
+  return json.data as StockPhoto[];
 }
 
 export function videoFileUrl(filename: string): string {

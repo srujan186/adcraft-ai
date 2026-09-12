@@ -58,11 +58,33 @@ function createStore(key: string) {
 export const resultStore = createStore("adcraft_result");
 
 /**
- * The bottom-banner details. Shared deliberately: the result-page editor and
- * the full-screen video editor's Banner tab are two views of the SAME data,
- * so editing either one now updates the other instead of silently diverging.
+ * The bottom-banner details, edited in the editor's Banner tab.
+ *
+ * This used to be shared with a separate BottomBanner panel on the result
+ * page. That page is now the editor itself, so the second view is gone and
+ * the store has a single writer again.
  */
 export const bannerStore = createStore("adcraft_banner");
+
+/**
+ * Per-scene image replacements made in the editor, keyed by scene index.
+ *
+ * Uploads are downscaled to a JPEG data URL before they land here — a raw
+ * photo would blow sessionStorage's quota on its own, and safeSet swallowing
+ * that failure would make the override vanish on reload with no explanation.
+ */
+export const scenesStore = createStore("adcraft_scenes");
+
+export interface SceneOverride {
+  /** Data URL (upload) or a Pexels CDN URL. */
+  src: string;
+  kind: "upload" | "stock";
+  /** Pexels requires attribution wherever the photo is shown. */
+  credit?: string;
+  creditUrl?: string;
+}
+
+export type SceneOverrides = Record<string, SceneOverride>;
 
 export interface BannerData {
   companyName: string;

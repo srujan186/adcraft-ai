@@ -1,8 +1,16 @@
 "use client";
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import "./editor.css";
-import type { VideoResult } from "@/lib/api";
-import { bannerStore, type BannerData } from "@/lib/clientStore";
+import { rerenderVideo, type VideoResult } from "@/lib/api";
+import {
+  bannerStore,
+  resultStore,
+  scenesStore,
+  type BannerData,
+  type SceneOverride,
+  type SceneOverrides,
+} from "@/lib/clientStore";
+import ScenePicker from "./ScenePicker";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,9 +30,14 @@ interface Edits {
   };
 }
 
-type TabId = "text" | "voiceover" | "music" | "colors" | "banner";
+type TabId = "scenes" | "text" | "voiceover" | "music" | "colors" | "banner";
+
+// The renderer builds the background from three screenshots of the site, so
+// the ad always has exactly three scenes of equal length.
+const SCENE_COUNT = 3;
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
+  { id: "scenes",    icon: "🎞️", label: "Scenes" },
   { id: "text",      icon: "📝", label: "Text" },
   { id: "voiceover", icon: "🎤", label: "Voice" },
   { id: "music",     icon: "🎵", label: "Music" },
@@ -44,21 +57,102 @@ const MUSIC_OPTIONS = [
   { id: "inspirational", icon: "✨", name: "Inspire",   desc: "Motivational" },
 ];
 
+/**
+ * Pull one still per scene out of the rendered MP4.
+ *
+ * The backend never exposes the screenshots it captured (they live in temp/),
+ * so the honest source for a scene thumbnail is the finished video itself.
+ * Needs crossOrigin="anonymous" plus the CORS header the API already sends —
+ * without it drawImage taints the canvas and toDataURL throws.
+ */
+function useSceneThumbs(src: string, count: number) {
+  const [thumbs, setThumbs] = useState<string[]>([]);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    if (!src) return;
+    let cancelled = false;
+
+    const v = document.createElement("video");
+    v.crossOrigin = "anonymous";
+    v.preload = "auto";
+    v.muted = true;
+
+    const shots: string[] = [];
+    let i = 0;
+
+    const seekNext = () => {
+      // Mid-point of each scene reads better than its first frame.
+      v.currentTime = (v.duration / count) * (i + 0.5);
+    };
+
+    const onMeta = () => {
+      if (cancelled) return;
+      setDuration(v.duration);
+      seekNext();
+    };
+
+    const onSeeked = () => {
+      if (cancelled) return;
+      const canvas = document.createElement("canvas");
+      const ratio = v.videoHeight && v.videoWidth ? v.videoHeight / v.videoWidth : 0.5625;
+      canvas.width = 320;
+      canvas.height = Math.round(320 * ratio);
+      const ctx = canvas.getContext("2d");
+      try {
+        ctx?.drawImage(v, 0, 0, canvas.width, canvas.height);
+        shots.push(canvas.toDataURL("image/jpeg", 0.7));
+      } catch {
+        shots.push(""); // tainted canvas — fall back to a placeholder tile
+      }
+      i += 1;
+      if (i < count) seekNext();
+      else setThumbs(shots);
+    };
+
+    v.addEventListener("loadedmetadata", onMeta);
+    v.addEventListener("seeked", onSeeked);
+    v.src = src;
+
+    return () => {
+      cancelled = true;
+      v.removeEventListener("loadedmetadata", onMeta);
+      v.removeEventListener("seeked", onSeeked);
+      v.src = "";
+    };
+  }, [src, count]);
+
+  return { thumbs, duration };
+}
+
+function fmt(seconds: number) {
+  if (!Number.isFinite(seconds)) return "0:00";
+  const s = Math.floor(seconds);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
   result: VideoResult;
   videoSrc: string;
+  /** Leaves the editor — the result page routes this to /generate. */
   onBack: () => void;
+  onDownload: () => void;
 }
 
-export default function VideoEditor({ result, videoSrc, onBack }: Props) {
+export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Props) {
   const { script, scraped } = result;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const lanesRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabId>("text");
+  const [activeTab, setActiveTab] = useState<TabId>("scenes");
+  const [pickerScene, setPickerScene] = useState<number | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
   const [saved, setSaved] = useState(false);
   const [globalSaved, setGlobalSaved] = useState(false);
+  const [rendering, setRendering] = useState(false);
+  const [renderError, setRenderError] = useState("");
 
   // The banner lives in a store shared with the result page's Bottom Banner
   // panel, so the two stay in step instead of silently diverging.
@@ -67,6 +161,23 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
     bannerStore.getSnapshot,
     bannerStore.getServerSnapshot
   );
+
+  const { thumbs, duration } = useSceneThumbs(videoSrc, SCENE_COUNT);
+
+  const scenesRaw = useSyncExternalStore(
+    scenesStore.subscribe,
+    scenesStore.getSnapshot,
+    scenesStore.getServerSnapshot
+  );
+
+  const sceneOverrides = useMemo<SceneOverrides>(() => {
+    if (!scenesRaw) return {};
+    try {
+      return JSON.parse(scenesRaw) as SceneOverrides;
+    } catch {
+      return {};
+    }
+  }, [scenesRaw]);
 
   const storedBanner = useMemo<Partial<BannerData>>(() => {
     if (!bannerRaw) return {};
@@ -118,16 +229,117 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
     });
   }
 
+  function pickScene(index: number, override: SceneOverride) {
+    scenesStore.write({ ...sceneOverrides, [String(index)]: override });
+    setPickerScene(null);
+    setSaved(false);
+  }
+
+  function clearScene(index: number) {
+    const next = { ...sceneOverrides };
+    delete next[String(index)];
+    scenesStore.write(next);
+    setSaved(false);
+  }
+
+  /** The image shown for a scene: the user's replacement, else the real frame. */
+  function sceneImage(i: number): string {
+    return sceneOverrides[String(i)]?.src || thumbs[i] || "";
+  }
+
+  function sceneRange(i: number): string {
+    if (!duration) return "—";
+    const per = duration / SCENE_COUNT;
+    return `${fmt(per * i)} – ${fmt(per * (i + 1))}`;
+  }
+
+  // A tick each second, labelled every five. Keeps 15s and 30s ads legible
+  // without crowding the ruler.
+  const ticks = duration
+    ? Array.from({ length: Math.floor(duration) + 1 }, (_, s) => ({
+        at: s,
+        major: s % 5 === 0,
+      }))
+    : [];
+
+  const activeScene = duration
+    ? Math.min(SCENE_COUNT - 1, Math.floor((currentTime / duration) * SCENE_COUNT))
+    : 0;
+
   function handleApply() {
     sessionStorage.setItem("adcraft_edits", JSON.stringify(edits));
     setSaved(true);
     setTimeout(() => setSaved(false), 2200);
   }
 
-  function handleSaveExport() {
+  async function handleSaveExport() {
     sessionStorage.setItem("adcraft_edits", JSON.stringify(edits));
-    setGlobalSaved(true);
-    setTimeout(() => setGlobalSaved(false), 2500);
+    setRenderError("");
+    setRendering(true);
+
+    try {
+      // Only 15 and 30 exist, so the midpoint separates them safely.
+      const secs = videoRef.current?.duration ?? duration;
+      const adDuration: 15 | 30 = secs > 22 ? 30 : 15;
+
+      const fresh = await rerenderVideo({
+        business_name: scraped.business_name,
+        duration: adDuration,
+        url: scraped.url ?? "",
+        logo_url: scraped.logo_url ?? "",
+        colors: {
+          primary: edits.primaryColor,
+          secondary: scraped.colors?.secondary ?? "#ffffff",
+          accent: edits.accentColor,
+        },
+        script: {
+          headline: edits.headline,
+          subtext: edits.subtext,
+          cta: edits.cta,
+          voiceover: edits.voiceover,
+          music_style: edits.musicStyle,
+          scene_description: script.scene_description ?? "",
+        },
+        // "" keeps the scene as-is; the backend re-shoots those from the site.
+        scene_images: Array.from(
+          { length: SCENE_COUNT },
+          (_, i) => sceneOverrides[String(i)]?.src ?? ""
+        ),
+      });
+
+      // Writing the store re-renders the page with the new file, which flows
+      // back down as a fresh videoSrc. This component keeps its edit state.
+      resultStore.write({ ...result, video_url: fresh.video_url, render_id: fresh.render_id });
+
+      setGlobalSaved(true);
+      setTimeout(() => setGlobalSaved(false), 2500);
+    } catch (err) {
+      setRenderError(
+        err instanceof Error ? err.message : "Re-render failed. Please try again."
+      );
+    } finally {
+      setRendering(false);
+    }
+  }
+
+  /** Map a click anywhere in the lane area to a timecode. */
+  function scrubTo(clientX: number) {
+    const el = lanesRef.current;
+    const v = videoRef.current;
+    if (!el || !v || !duration) return;
+    const rect = el.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    v.currentTime = ratio * duration;
+    setCurrentTime(ratio * duration);
+  }
+
+  /** Jump the preview to the start of a scene. */
+  function showScene(i: number) {
+    const v = videoRef.current;
+    if (!v || !duration) return;
+    const at = (duration / SCENE_COUNT) * i;
+    v.currentTime = at;
+    setCurrentTime(at);
   }
 
   function togglePlay() {
@@ -141,6 +353,85 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
 
   function renderPanel() {
     switch (activeTab) {
+      case "scenes": return (
+        <>
+          <div className="ve-panel-header">
+            <div className="ve-panel-title">Scenes</div>
+            <div className="ve-panel-sub">
+              Three shots of your site, split evenly across the ad
+            </div>
+          </div>
+          <div className="ve-panel-body">
+            <div className="ve-scene-list">
+              {Array.from({ length: SCENE_COUNT }, (_, i) => {
+                const override = sceneOverrides[String(i)];
+                const img = sceneImage(i);
+                return (
+                  <div
+                    key={i}
+                    className={`ve-scene${activeScene === i ? " current" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Jump to scene ${i + 1}`}
+                    onClick={() => showScene(i)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        showScene(i);
+                      }
+                    }}
+                  >
+                    <div className="ve-scene-thumb">
+                      {img ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={img} alt={`Scene ${i + 1}`} />
+                      ) : (
+                        <span className="ve-scene-empty">{i + 1}</span>
+                      )}
+                      <button
+                        className="ve-scene-change"
+                        /* Without this the row's own click handler also fires
+                           and the preview jumps behind the open picker. */
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPickerScene(i);
+                        }}
+                        id={`ve-scene-change-${i}`}
+                      >
+                        Change
+                      </button>
+                    </div>
+                    <div className="ve-scene-meta">
+                      <p className="ve-scene-name">Scene #{i + 1}</p>
+                      <p className="ve-scene-time">{sceneRange(i)}</p>
+                      {activeScene === i && (
+                        <p className="ve-scene-now">Currently visible</p>
+                      )}
+                      {override && (
+                        <p className="ve-scene-swapped">
+                          <span className="ve-scene-src">
+                            {override.kind === "upload" ? "Your image" : `Stock · ${override.credit}`}
+                          </span>
+                          <button
+                            className="ve-scene-reset"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              clearScene(i);
+                            }}
+                          >
+                            Reset
+                          </button>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      );
+
       case "text": return (
         <>
           <div className="ve-panel-header">
@@ -149,15 +440,15 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
           </div>
           <div className="ve-panel-body">
             <VeField label="Headline" id="ve-headline">
-              <input className="ve-input" value={edits.headline}
+              <input id="ve-headline" className="ve-input" value={edits.headline}
                 onChange={(e) => set("headline", e.target.value)} />
             </VeField>
             <VeField label="Subtext" id="ve-subtext">
-              <textarea className="ve-textarea" value={edits.subtext}
+              <textarea id="ve-subtext" className="ve-textarea" value={edits.subtext}
                 onChange={(e) => set("subtext", e.target.value)} />
             </VeField>
             <VeField label="Call to Action" id="ve-cta">
-              <input className="ve-input" value={edits.cta}
+              <input id="ve-cta" className="ve-input" value={edits.cta}
                 onChange={(e) => set("cta", e.target.value)} />
             </VeField>
           </div>
@@ -172,7 +463,7 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
           </div>
           <div className="ve-panel-body">
             <VeField label="Script" id="ve-voiceover">
-              <textarea className="ve-textarea"
+              <textarea id="ve-voiceover" className="ve-textarea"
                 style={{ minHeight: 160 }}
                 value={edits.voiceover}
                 onChange={(e) => set("voiceover", e.target.value)} />
@@ -256,22 +547,22 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
           </div>
           <div className="ve-panel-body">
             <VeField label="Company Name" id="ve-banner-company">
-              <input className="ve-input" value={banner.companyName}
+              <input id="ve-banner-company" className="ve-input" value={banner.companyName}
                 placeholder="Nike, Inc."
                 onChange={(e) => setBanner("companyName", e.target.value)} />
             </VeField>
             <VeField label="Phone Number" id="ve-banner-phone">
-              <input className="ve-input" value={banner.phone}
+              <input id="ve-banner-phone" className="ve-input" value={banner.phone}
                 placeholder="+1 (800) 555-0100"
                 onChange={(e) => setBanner("phone", e.target.value)} />
             </VeField>
             <VeField label="Address" id="ve-banner-address">
-              <input className="ve-input" value={banner.address}
+              <input id="ve-banner-address" className="ve-input" value={banner.address}
                 placeholder="One Bowerman Drive, OR"
                 onChange={(e) => setBanner("address", e.target.value)} />
             </VeField>
             <VeField label="Website" id="ve-banner-website">
-              <input className="ve-input" value={banner.website}
+              <input id="ve-banner-website" className="ve-input" value={banner.website}
                 placeholder="nike.com"
                 onChange={(e) => setBanner("website", e.target.value)} />
             </VeField>
@@ -280,6 +571,10 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
       );
     }
   }
+
+  const hasBannerData = Boolean(
+    banner.companyName || banner.phone || banner.address || banner.website
+  );
 
   const showBanner = activeTab === "banner" && (
     banner.companyName || banner.phone || banner.address || banner.website
@@ -292,18 +587,26 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
       {/* ── Top bar ─────────────────────────────────── */}
       <div className="ve-topbar">
         <div className="ve-topbar-left">
-          <button id="ve-back-btn" className="ve-back-btn" onClick={onBack}>
-            ← Back
-          </button>
-          <span className="ve-title">✏️ Video Editor — {scraped.business_name}</span>
+          <span className="ve-brand">
+            <span className="ve-brand-mark">⚡</span>
+            AdCraft Studio
+          </span>
+          <span className="ve-title">{scraped.business_name}</span>
         </div>
         <div className="ve-topbar-right">
+          <button id="ve-download-btn" className="ve-ghost-btn" onClick={onDownload}>
+            Download MP4
+          </button>
+          <button id="ve-back-btn" className="ve-ghost-btn" onClick={onBack}>
+            New ad
+          </button>
           <button
             id="ve-save-export-btn"
             className="ve-save-btn"
             onClick={handleSaveExport}
+            disabled={rendering}
           >
-            {globalSaved ? "✅ Saved!" : "💾 Save & Export"}
+            {rendering ? "Re-rendering…" : globalSaved ? "Saved" : "Save & re-render"}
           </button>
         </div>
       </div>
@@ -349,7 +652,9 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
               <video
                 ref={videoRef}
                 src={videoSrc}
+                crossOrigin="anonymous"
                 controls={false}
+                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                 onEnded={() => setPlaying(false)}
                 style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
               />
@@ -386,31 +691,127 @@ export default function VideoEditor({ result, videoSrc, onBack }: Props) {
                 {playing ? "⏸" : "▶"}
               </button>
               <span className="ve-duration-badge">
-                {result.script ? "0:00" : "--:--"}
+                {fmt(currentTime)} / {fmt(duration)}
               </span>
-              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginLeft: "0.5rem" }}>
-                Timeline (visual)
-              </span>
+              <span className="ve-tl-hint">Click the timeline to scrub</span>
             </div>
-            <div className="ve-tracks">
-              {[
-                { label: "BOTTOM BANNER", color: "#ec4899", width: "65%" },
-                { label: "MUSIC",         color: "#14b8a6", width: "100%" },
-                { label: "VOICE & SCRIPT",color: "#8b5cf6", width: "88%" },
-                { label: "VIDEO CLIPS",   color: "#3b82f6", width: "100%" },
-              ].map((track) => (
-                <div key={track.label} className="ve-track">
-                  <span className="ve-track-label">{track.label}</span>
-                  <div
-                    className="ve-track-bar"
-                    style={{ background: track.color, width: track.width }}
-                  />
+
+            {/* Lanes. Widths are the real thing: the renderer splits the
+                background into equal scenes, and loops music to the full
+                duration. The banner lane is dashed because it is previewed
+                here but is not in the MP4 yet. */}
+            <div className="ve-tl-body">
+              <div className="ve-tl-gutter">
+                <span className="ve-tl-gutter-head" />
+                <span className="ve-tl-lane-label">Video</span>
+                <span className="ve-tl-lane-label">Voice</span>
+                <span className="ve-tl-lane-label">Music</span>
+                {hasBannerData && <span className="ve-tl-lane-label">Banner</span>}
+              </div>
+
+              <div
+                className="ve-tl-lanes"
+                ref={lanesRef}
+                onClick={(e) => scrubTo(e.clientX)}
+                role="presentation"
+              >
+                <div className="ve-tl-ruler">
+                  {ticks.map((t) => (
+                    <span
+                      key={t.at}
+                      className={`ve-tick${t.major ? " major" : ""}`}
+                      style={{ left: `${(t.at / duration) * 100}%` }}
+                    >
+                      {t.major && <b>{fmt(t.at)}</b>}
+                    </span>
+                  ))}
                 </div>
-              ))}
+
+                <div className="ve-lane">
+                  {Array.from({ length: SCENE_COUNT }, (_, i) => {
+                    const img = sceneImage(i);
+                    return (
+                      <div
+                        key={i}
+                        className={`ve-clip ve-clip-video${activeScene === i ? " current" : ""}`}
+                        style={{
+                          left: `${(i / SCENE_COUNT) * 100}%`,
+                          width: `${(1 / SCENE_COUNT) * 100}%`,
+                        }}
+                      >
+                        {img && (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={img} alt="" />
+                        )}
+                        <span className="ve-clip-name">Scene {i + 1}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="ve-lane">
+                  <div className="ve-clip ve-clip-voice" style={{ left: 0, width: "100%" }}>
+                    <span className="ve-clip-name">Voiceover</span>
+                  </div>
+                </div>
+
+                <div className="ve-lane">
+                  <div className="ve-clip ve-clip-music" style={{ left: 0, width: "100%" }}>
+                    <span className="ve-clip-name">Music bed — {edits.musicStyle}</span>
+                  </div>
+                </div>
+
+                {hasBannerData && (
+                  <div className="ve-lane">
+                    <div className="ve-clip ve-clip-pending" style={{ left: 0, width: "100%" }}>
+                      <span className="ve-clip-name">Bottom banner — preview only</span>
+                    </div>
+                  </div>
+                )}
+
+                {duration > 0 && (
+                  <div
+                    className="ve-playhead"
+                    style={{ left: `${(currentTime / duration) * 100}%` }}
+                    aria-hidden="true"
+                  >
+                    <span className="ve-playhead-grip" />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <div className={`ve-notice${renderError ? " error" : ""}`} role="status">
+        {renderError
+          ? renderError
+          : rendering
+          ? "Re-rendering your ad — this takes about half a minute."
+          : "Save & re-render rebuilds the MP4 with your text, voice, music, colours and scene images."}
+      </div>
+
+      {rendering && (
+        <div className="ve-rerender-scrim" role="status" aria-live="polite">
+          <div className="ve-rerender-card">
+            <span className="ve-rerender-spinner" aria-hidden="true" />
+            <p className="ve-rerender-title">Re-rendering your ad</p>
+            <p className="ve-rerender-sub">
+              Narration and music are being regenerated. About half a minute.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {pickerScene !== null && (
+        <ScenePicker
+          sceneLabel={`Scene #${pickerScene + 1}`}
+          seedQuery={script.scene_description || scraped.business_name || "business"}
+          onPick={(o) => pickScene(pickerScene, o)}
+          onClose={() => setPickerScene(null)}
+        />
+      )}
     </div>
   );
 }
