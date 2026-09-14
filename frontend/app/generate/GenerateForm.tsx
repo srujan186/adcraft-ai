@@ -2,6 +2,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { generateVideo, type AdStyle } from "@/lib/api";
+import { resetEditorState } from "@/lib/clientStore";
 import GeneratingOverlay from "./GeneratingOverlay";
 
 const STYLES: { key: AdStyle; name: string; emoji: string; desc: string }[] = [
@@ -61,6 +62,9 @@ export default function GenerateForm() {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
       clearTimeout(stepTimer3);
+      // Drop the previous ad's scene uploads and banner before the new
+      // result lands, or they bleed into an unrelated brand's video.
+      resetEditorState();
       sessionStorage.setItem("adcraft_result", JSON.stringify(result));
       router.push("/result");
     } catch (err: unknown) {
@@ -72,15 +76,14 @@ export default function GenerateForm() {
       // Cancelling is a deliberate act, not a failure — say nothing.
       if (controller.signal.aborted) return;
 
-      let errorMessage =
-        err instanceof Error ? err.message : "Something went wrong. Please try again.";
-      if (
-        errorMessage.includes("couldn't automatically read") ||
-        errorMessage.includes("Could not scrape") ||
-        errorMessage.toLowerCase().includes("url")
-      ) {
-        errorMessage = "We couldn't read that URL. Please check it and try again.";
-      }
+      // The backend already explains what went wrong and what to try next —
+      // it can tell a DNS failure from a timeout from a block. This used to
+      // overwrite all of that with one generic line whenever the text merely
+      // contained "url", which threw away the only useful part.
+      const errorMessage =
+        err instanceof Error && err.message
+          ? err.message
+          : "Something went wrong. Please try again.";
 
       setError(errorMessage);
     } finally {

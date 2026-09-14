@@ -12,6 +12,7 @@ load_dotenv()
 
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 PEXELS_API_URL = "https://api.pexels.com/videos"
+PEXELS_PHOTO_API_URL = "https://api.pexels.com/v1"
 
 
 # ═══════════════════════════════════════════════════════
@@ -200,3 +201,48 @@ async def get_background_video(
         "Could not find or download any background video "
         "after trying all queries"
     )
+
+# ═══════════════════════════════════════════════════════
+# SECTION 4 — PHOTO SEARCH
+# Used by the editor's scene picker, not by the render
+# pipeline. Returns metadata only — nothing is downloaded
+# server-side; the browser loads the thumbnails directly.
+# ═══════════════════════════════════════════════════════
+
+async def search_photos(query: str, per_page: int = 15) -> list[dict]:
+    """
+    Search Pexels photos and return a trimmed list the editor can render.
+
+    Raises RuntimeError if PEXELS_API_KEY is missing, rather than letting a
+    None Authorization header fail deep inside aiohttp with a confusing error.
+    """
+    if not PEXELS_API_KEY:
+        raise RuntimeError("PEXELS_API_KEY is not set")
+
+    per_page = max(1, min(per_page, 40))
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"{PEXELS_PHOTO_API_URL}/search",
+            headers={"Authorization": PEXELS_API_KEY},
+            params={"query": query, "per_page": per_page, "orientation": "landscape"},
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as response:
+            if response.status != 200:
+                body = (await response.text())[:200]
+                raise RuntimeError(f"Pexels returned {response.status}: {body}")
+            data = await response.json()
+
+    photos = []
+    for p in data.get("photos", []):
+        src = p.get("src") or {}
+        photos.append({
+            "id":     p.get("id"),
+            "alt":    p.get("alt") or query,
+            # Pexels requires attribution wherever photos are shown.
+            "author": p.get("photographer") or "",
+            "author_url": p.get("photographer_url") or "",
+            "thumb":  src.get("medium") or src.get("small") or "",
+            "full":   src.get("large2x") or src.get("large") or src.get("original") or "",
+        })
+    return photos

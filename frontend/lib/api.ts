@@ -1,11 +1,16 @@
 // lib/api.ts — typed API client for AdCraft AI backend
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Empty means same-origin: next.config.ts rewrites /api/* to the backend, so
+// the browser never makes a cross-origin request. Set NEXT_PUBLIC_API_URL to an
+// absolute URL only when the backend is on a different host.
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ScrapeResult {
   business_name: string;
+  /** Photos found on the page, used as the ad's scenes. */
+  images?: string[];
   description: string;
   /** The site the ad was built from — needed to re-render un-swapped scenes. */
   url?: string;
@@ -26,9 +31,33 @@ export interface AdScript {
   key_message: string;
 }
 
+/** The ad's closing frame. Mirrors EndCard in backend/models/generate.py. */
+export interface EndCardData {
+  company_name: string;
+  phone: string;
+  email: string;
+  address: string;
+  website: string;
+}
+
 export interface VideoResult {
   video_url: string;
   render_id: string;
+  /** How many shots the ad was cut from — varies with what the site yielded. */
+  scene_count?: number;
+  /**
+   * What each scene was built from, one entry per scene: a URL, or "" for a
+   * scene cut from a screenshot or stock clip, which cannot be asked for
+   * again by name. The editor sends these back so deleting one scene does
+   * not reshuffle the others.
+   */
+  scene_sources?: string[];
+  /** Whether the rendered file already ends on a contact card. */
+  has_end_card?: boolean;
+  /** When that card takes over, in seconds. */
+  end_card_at?: number | null;
+  /** The details it was rendered with, so the editor knows what is baked in. */
+  end_card?: EndCardData;
   script: AdScript;
   scraped: ScrapeResult;
 }
@@ -91,15 +120,34 @@ export interface RerenderPayload {
     music_style: string;
     scene_description: string;
   };
-  /** One entry per scene; "" means "use the live site for this one". */
+  /** One entry per scene; "" means "use the site's own image for this one". */
   scene_images?: string[];
+  /** The site's photos, so un-replaced scenes keep the imagery they had. */
+  content_images?: string[];
+  /** Closing card details. Omit, or leave every field blank, for no card. */
+  end_card?: EndCardData;
+  /**
+   * How many scenes to cut the footage into.
+   *
+   * Sent explicitly because the backend would otherwise infer it from how many
+   * `scene_images` entries carry an image — which silently drops a slot the
+   * user added with "+" but left for us to fill.
+   */
+  scene_count?: number;
 }
 
 /** Re-runs assembly against edited copy. No scrape, no LLM — 20-45s. */
 export async function rerenderVideo(
   payload: RerenderPayload,
   signal?: AbortSignal
-): Promise<{ video_url: string; render_id: string }> {
+): Promise<{
+  video_url: string;
+  render_id: string;
+  scene_count?: number;
+  scene_sources?: string[];
+  has_end_card?: boolean;
+  end_card_at?: number | null;
+}> {
   const res = await fetch(`${BASE}/api/generate/rerender`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -108,7 +156,14 @@ export async function rerenderVideo(
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.detail ?? "Re-render failed");
-  return json.data as { video_url: string; render_id: string };
+  return json.data as {
+    video_url: string;
+    render_id: string;
+    scene_count?: number;
+    scene_sources?: string[];
+    has_end_card?: boolean;
+    end_card_at?: number | null;
+  };
 }
 
 export async function searchPhotos(

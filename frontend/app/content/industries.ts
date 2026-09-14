@@ -46,7 +46,7 @@ export const INDUSTRIES: MarketingContent[] = [
       },
       {
         title: "Contact details on screen",
-        desc: "The bottom banner editor adds your phone number, address and website over the finished video.",
+        desc: "The end card editor closes the ad with your phone number, address and website.",
       },
     ],
     suggested: { style: "Playful", duration: "30 seconds", music: "Upbeat" },
@@ -121,7 +121,7 @@ export const INDUSTRIES: MarketingContent[] = [
       },
       {
         title: "Agent details on screen",
-        desc: "Add a contact number and website to the bottom banner so enquiries have somewhere to land.",
+        desc: "Add a contact number and website to the end card so enquiries have somewhere to land.",
       },
     ],
     suggested: { style: "Modern", duration: "30 seconds", music: "Inspirational" },
@@ -171,7 +171,7 @@ export const INDUSTRIES: MarketingContent[] = [
       },
       {
         title: "Location details included",
-        desc: "The banner editor puts your address and phone number on the finished video.",
+        desc: "The end card editor puts your address and phone number on the closing frames.",
       },
     ],
     suggested: { style: "Bold", duration: "30 seconds", music: "Dramatic" },
@@ -221,7 +221,7 @@ export const INDUSTRIES: MarketingContent[] = [
       },
       {
         title: "Booking details on screen",
-        desc: "Add your phone number and booking URL to the bottom banner before export.",
+        desc: "Add your phone number and booking URL to the end card before export.",
       },
     ],
     suggested: { style: "Playful", duration: "15 seconds", music: "Upbeat" },
@@ -242,7 +242,7 @@ export const INDUSTRIES: MarketingContent[] = [
       },
       {
         title: "Contact details front and centre",
-        desc: "Phone number, service area and website all sit in the bottom banner where they are easy to read.",
+        desc: "Phone number, service area and website all sit on the end card where they are easy to read.",
       },
       {
         title: "Works from a simple site",
@@ -296,7 +296,7 @@ export const INDUSTRIES: MarketingContent[] = [
       },
       {
         title: "Date and venue on screen",
-        desc: "Put the essentials in the bottom banner so they stay visible for the whole spot.",
+        desc: "Put the essentials on the end card so the ad closes on how to get in touch.",
       },
     ],
     suggested: { style: "Bold", duration: "15 seconds", music: "Upbeat" },

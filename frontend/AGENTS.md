@@ -152,12 +152,156 @@ client). Uploads are downscaled to 960px JPEG data URLs *before* they reach
 **Client state** — `lib/clientStore.ts` holds sessionStorage-backed stores:
 `resultStore`, `bannerStore` and `scenesStore`.
 
+**These stores outlive a generation, and that leaked between ads.** They are
+keyed by name, not by render, so an image uploaded for one brand reappeared as
+a scene in the next ad, and the bottom banner kept the previous company's
+details. `GenerateForm` now calls `resetEditorState()` before storing a new
+result. Two traps if you touch this:
+
+- `sessionStorage.removeItem` alone is **not** enough. `createStore` keeps a
+  module-level `cache`, so `getSnapshot` would keep returning the old string
+  for the life of the tab. Use the store's `clear()`.
+- Scene overrides are stamped `{ renderId, scenes }` and ignored when the id
+  does not match the current render — so even a missed reset cannot paste one
+  ad's uploads into another.
+
+**The player shows the rendered file, not your edits.** Text and scene changes
+are invisible in it until a re-render, which reads as the editor being broken.
+`.ve-live` overlays a live composition whenever `dirty` is true — the current
+scene image plus the edited headline/subtext/CTA, positioned with `cq` units to
+mirror `assemble_with_ffmpeg`'s geometry on a 1280x720 frame (scrim alpha 150,
+headline 64px at y=180, subtext 36px at y=340, CTA at y=520). It hides while
+playing so the real render stays watchable, and a successful re-render writes
+the edited script back into `resultStore` so `dirty` resets — without that the
+preview sits over a file that already matches it.
+
+**The timeline is navigation, not decoration.** Each lane opens the panel that
+edits it (`LANES` maps lane -> tab in `VideoEditor.tsx`): the gutter label and
+the clip both switch tabs, a video clip additionally seeks to that scene, and
+the ruler plus the empty lane background still scrub. Clips `stopPropagation`
+so selecting one does not also move the playhead.
+
+**`dirty` gates the Save button**, so anything the renderer consumes has to be
+in it. `voiceover` was missing and a rewritten narration script left Save
+disabled. The end card is in it too, now that it actually renders.
+
+**The End Card tab is the ad's closing scene.** It used to be "Bottom Banner":
+it collected a company name, phone, address and website, drew them over the
+preview, and sent *nothing* to the renderer, so a downloaded MP4 never had
+them. Those details now composite into the MP4 as its final
+`ENDCARD_SECONDS` (3s) — logo, name, accent rule, then phone / email /
+website / address — and the footage is squeezed into the time before it so no
+scene is wasted underneath. Three things to know:
+
+- **A company name alone does not make a card.** The name is pre-filled from
+  the scrape, so counting it as content would bolt three seconds onto every
+  re-render whether or not anyone opened the panel. `hasCardData` requires at
+  least one of phone / email / website / address.
+- **`.ve-endcard` previews it** with the same stack the renderer draws, in `cq`
+  units. `showLiveCaptions` excludes the card's window, because the renderer
+  stops the captions when the card starts — previewing both at once would show
+  a frame that can never exist.
+- **The lane sits at the end**, `ENDCARD_SECONDS / duration` wide, and is solid
+  rather than dashed. Dashed meant "previewed here, never rendered".
+
+**Scenes live in the footage window, not the whole video.** Every scene
+calculation used to divide the full duration by the scene count, which broke
+the moment an end card existed: the last clip ran 12.5s-15s while the card sat
+at 12s-15s, so they overlapped in the timeline, and `useSceneThumbs` sampled
+scene 6 at 13.75s — inside the card — so its thumbnail was a picture of the
+contact card. `footageEnd` (`duration - renderedTail`) is the divisor for
+`sceneRange`, `showScene`, `activeScene` and the clip geometry, and
+`useSceneThumbs` takes the tail length so it samples before the cut.
+
+Note the two different counts, and don't collapse them:
+
+- `renderedScenes` — what the file on screen was cut into. Thumbnails, seeking
+  and timecodes are all keyed off this, because they describe the real video.
+- `sceneCount` — `renderedScenes + extraScenes`, what the *next* render will
+  produce. The panel list, the timeline clips and the payload use this.
+
+**The scene list is an ordered array of `SceneSlot`, not a map keyed by index.**
+Index-keyed overrides could not express a deletion: remove scene 2 and every
+override after it pointed at the wrong scene. `scenesStore` holds
+`{ renderId, slots }`; absent means "no edits, use the render's own layout"
+(`baseSlots`). Add, delete and replace are all list operations, and `slotsDirty`
+is just the edited list differing from `baseSlots`.
+
+Each slot carries two things that are easy to conflate:
+
+- `src` — what to render: a data URL, an https URL, or `""` meaning "you
+  choose", which the backend fills from the page's photography.
+- `thumbIndex` — which scene of the **current** render it shows. After a delete
+  the list index and the file's own scene order no longer agree, so the
+  thumbnail, the seek target and the `activeScene` highlight all go through
+  `thumbIndex`, never the loop index. A slot no render has produced has none.
+
+**This needs `scene_sources` from the backend.** The editor could describe a
+scene it had replaced itself, but for every other one it knew the picture and
+not where the picture came from — so a delete could only send N-1 blanks, and
+the backend refilled them from the top, silently shuffling the survivors. The
+render now reports the source URL per scene (`""` for a screenshot or stock
+clip, which cannot be asked for again by name), and the editor hands each
+surviving scene back by name.
+
+**"+" appends a scene**, on the video track after the last clip, plus an Add
+scene button in the panel. It adds a slot and opens the picker straight away;
+leaving it empty is fine. Appended slots render `.pending` (dashed) and clicking
+one opens its picker rather than seeking. **The `×` on a scene thumbnail
+deletes it** (hidden on the last remaining scene — an ad with no scenes is not
+an ad), and **Reset all** drops the whole edit layer.
+
+**The `+` is not on the track, and that is deliberate.** Putting it there
+failed twice: at `left: footagePct%` it fell off the right edge whenever there
+was no end card (the clips reach 100%, and no end card is the default state, so
+the button was missing exactly when first needed), and at `right: 4px` it sat on
+top of the last clip. It now lives in `.ve-tl-aside`, a 30px column beside the
+scroller, aligned with the video lane. The track is a picture of the ad's
+duration; an action button is not part of that. `MAX_SCENES` (12) mirrors the
+backend's cap, and the button disables there.
+
+**The timeline zooms.** `.ve-tl-scroll` is a horizontal scroller holding
+`.ve-tl-track`, whose width is `zoom * 100%`. Only the track scales, so clip
+positions stay in `%` of real time and remain accurate at any magnification —
+`scrubTo` measures the *track*, not the scroller. Zoom runs 1x to `MAX_ZOOM`
+(8) in `ZOOM_STEP` (1.5) increments, with a Fit button back to 1x. While
+playing, an effect scrolls the playhead back into view when it leaves the
+visible slice; it does nothing at 1x, so it never fights a scroll you made
+yourself.
+
+Adding scenes narrows the clips — the ad's duration never changes — so clip
+labels degrade in steps via container queries on `.ve-clip` itself: the word
+"Scene" goes, then the number moves over the thumbnail, then the thumbnail goes,
+then the label. **Read those thresholds against the text's share of the clip,
+not the clip's width**: a video clip's label carries `margin-left: 56px` to
+clear its thumbnail, so a 74px threshold left the twelve-scene case (78px clips)
+still showing the word and ellipsising the number to "S...".
+
+The count goes to the backend as an explicit `scene_count`, because inferring it
+from "entries that carry an image" gave an added-but-empty slot no way to
+exist.
+
 **Save & re-render** posts to `POST /api/generate/rerender` with the edited
 script, colours and one `scene_images` entry per scene (`""` = keep that scene,
 and the backend re-captures it from the site). On success it writes the new
 `video_url` into `resultStore`, which flows back down as a fresh `videoSrc`
 without remounting the editor, so edit state survives. Takes 20-45s, so it puts
 up `.ve-rerender-scrim`.
+
+**Single origin.** `next.config.ts` rewrites `/api/*` (plus `/docs` and
+`/openapi.json`) to `BACKEND_ORIGIN`, default `http://localhost:8000` — the
+same shape `../nginx.conf` uses for docker-compose. So `lib/api.ts` defaults
+`BASE` to `""` and the browser never makes a cross-origin request: no CORS
+preflights, and the `<video>` behind the scene thumbnails is same-origin so its
+canvas is never tainted. Two settings are load-bearing:
+
+- `experimental.proxyTimeout: 300_000` — a generate runs 45-160s and Next kills
+  a proxied request at **30s** by default, returning a 500 mid-render.
+- `experimental.proxyClientMaxBodySize` — the editor posts scene images as
+  base64 data URLs, so bodies reach a few MB.
+
+Set `NEXT_PUBLIC_API_URL` to an absolute URL to bypass the proxy when the
+backend lives on another host.
 
 **Styling** — `app/globals.css` only. Tokens on `:root`. Breakpoints at 768px,
 900px and 1024px. Reuse existing classes before writing new ones.

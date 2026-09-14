@@ -1,0 +1,6 @@
+# Claude Code's skill-discovery path. These entries are symlinks into
+# .agents/skills/ (the canonical install location recorded in skills-lock.json),
+# not real files — tracking them committed a second copy of every SKILL.md.
+# Keep .agents/skills/ as the single source; recreate these links with the
+# skills installer after a fresh clone.
+/.claude/skills/

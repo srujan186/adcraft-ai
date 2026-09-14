@@ -178,34 +178,29 @@ the scratchpad directory, never in the repo.
 
 ## Known open issues
 
-Do not "discover" and silently fix these — we know. Ask before touching them.
+The seven backend issues previously listed here are fixed, as is the frontend
+re-render gap. `backend/AGENTS.md` carries the detail and the current list.
 
-**Backend (deferred by us — frontend was finished first):**
+Items 1-4 of the old list are fixed too: the Groq call now runs via
+`asyncio.to_thread` under a 45s `wait_for`, `mix_audio` logs what actually
+happened, `assemble_video` sweeps its temp files in a `finally` and verifies the
+MP4 exists before reporting done, and scraped text is sanitised and fenced
+before it reaches the prompt. `backend/AGENTS.md` has the detail.
 
-1. `POST /api/scrape/debug` fetches any user-supplied URL server-side and echoes
-   headers/HTML back. Unauthenticated, comment says "DELETE before production".
-   Still wired up.
-2. `services/scraper.py` `extract_colors_from_stylesheets` uses **blocking**
-   `urllib.request.urlopen` inside an `async` handler — stalls the event loop
-   for up to 10s per scrape.
-3. `/api/generate/from-url` and `/api/generate/video` accept raw `dict`, so
-   `ad_style` and `duration` are unvalidated (unlike `/generate/script`).
-4. The `calm` music style has no matching file in `backend/music/`, so it
-   silently falls back. Either rename the soft-background mp3 to contain
-   `calm`, or drop `calm` from `STYLE_KEYWORDS` in `services/music.py`.
-5. `scrape_with_httpx` has unreachable code after its `return`.
+Still open, none of them blocking:
 
-**Frontend:**
-
-6. The video editor previews edits and persists them, but **nothing re-renders
-   the MP4** — Download still returns the original. This is the main
-   integration gap. The FAQ discloses it honestly; keep that in sync when fixed.
-
-**Repo:**
-
-7. Pushing to the Hugging Face Space is blocked: old commits contain raw
+1. There are no tests. Everything above was verified against the running
+   server, which means it can regress without anything noticing.
+2. Render's disk is ephemeral, so a finished MP4 can 404 after a redeploy.
+3. **Pushing to the Hugging Face Space is blocked**: old commits contain raw
    (non-LFS) binaries. The current tip is fine — history is not. Fixing needs
    `git filter-repo`/BFG or a fresh history. **Destructive — ask us first.**
+
+**The media files are git-lfs.** `models/*.onnx`, `models/*.bin` and
+`music/*.mp3` were sitting as 130-byte pointers, so Kokoro could not load and
+every ad rendered silent while still reporting success. `git lfs pull` fixes a
+checkout; `server.py` now checks at boot and says so loudly. A Docker build
+needs LFS materialised in the build context or the image has the same problem.
 
 ---
 

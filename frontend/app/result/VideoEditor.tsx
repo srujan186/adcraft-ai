@@ -1,14 +1,15 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import "./editor.css";
-import { rerenderVideo, type VideoResult } from "@/lib/api";
+import { rerenderVideo, type EndCardData, type VideoResult } from "@/lib/api";
 import {
   bannerStore,
   resultStore,
   scenesStore,
   type BannerData,
+  type SceneEdit,
   type SceneOverride,
-  type SceneOverrides,
+  type SceneSlot,
 } from "@/lib/clientStore";
 import ScenePicker from "./ScenePicker";
 
@@ -25,16 +26,31 @@ interface Edits {
   banner: {
     companyName: string;
     phone: string;
+    email: string;
     address: string;
     website: string;
   };
 }
 
-type TabId = "scenes" | "text" | "voiceover" | "music" | "colors" | "banner";
+type TabId = "scenes" | "text" | "voiceover" | "music" | "colors" | "endcard";
 
-// The renderer builds the background from three screenshots of the site, so
-// the ad always has exactly three scenes of equal length.
-const SCENE_COUNT = 3;
+// Mirrors ENDCARD_SECONDS in backend/services/video_assembler.py. The closing
+// card covers the last few seconds, and the captions stop when it starts.
+const ENDCARD_SECONDS = 3;
+
+// Mirrors MAX_SCENES in backend/models/generate.py — the request is rejected
+// above this, so the "+" has to stop offering it.
+const MAX_SCENES = 12;
+
+// Timeline magnification. 8x puts roughly two seconds across the panel, which
+// is enough to separate the clips of a 12-scene 15s ad.
+const MAX_ZOOM = 8;
+const ZOOM_STEP = 1.5;
+
+// How many shots the ad was cut from. The backend reports this per render —
+// a page that yields four usable images makes a four-scene ad — so it is not a
+// constant. This is only the fallback for results saved before it existed.
+const DEFAULT_SCENE_COUNT = 6;
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: "scenes",    icon: "🎞️", label: "Scenes" },
@@ -42,7 +58,15 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: "voiceover", icon: "🎤", label: "Voice" },
   { id: "music",     icon: "🎵", label: "Music" },
   { id: "colors",    icon: "🎨", label: "Colors" },
-  { id: "banner",    icon: "🏷️", label: "Banner" },
+  { id: "endcard",   icon: "📇", label: "End card" },
+];
+
+// Timeline lanes, and the panel each one edits.
+const LANES: { id: string; label: string; tab: TabId }[] = [
+  { id: "video",  label: "Video",  tab: "scenes" },
+  { id: "voice",  label: "Voice",  tab: "voiceover" },
+  { id: "music",  label: "Music",  tab: "music" },
+  { id: "endcard", label: "End card", tab: "endcard" },
 ];
 
 // The ids must match STYLE_KEYWORDS in backend/services/music.py — the backend
@@ -65,12 +89,12 @@ const MUSIC_OPTIONS = [
  * Needs crossOrigin="anonymous" plus the CORS header the API already sends —
  * without it drawImage taints the canvas and toDataURL throws.
  */
-function useSceneThumbs(src: string, count: number) {
+function useSceneThumbs(src: string, count: number, tailSeconds = 0) {
   const [thumbs, setThumbs] = useState<string[]>([]);
   const [duration, setDuration] = useState(0);
 
   useEffect(() => {
-    if (!src) return;
+    if (!src || count < 1) return;
     let cancelled = false;
 
     const v = document.createElement("video");
@@ -83,7 +107,12 @@ function useSceneThumbs(src: string, count: number) {
 
     const seekNext = () => {
       // Mid-point of each scene reads better than its first frame.
-      v.currentTime = (v.duration / count) * (i + 0.5);
+      //
+      // Sample inside the footage, not the whole file: with an end card the
+      // last scene's mid-point landed past the cut, so scene 6's thumbnail
+      // was a picture of the contact card.
+      const footage = Math.max(0.1, v.duration - tailSeconds);
+      v.currentTime = Math.min(v.duration - 0.05, (footage / count) * (i + 0.5));
     };
 
     const onMeta = () => {
@@ -120,9 +149,25 @@ function useSceneThumbs(src: string, count: number) {
       v.removeEventListener("seeked", onSeeked);
       v.src = "";
     };
-  }, [src, count]);
+  }, [src, count, tailSeconds]);
 
   return { thumbs, duration };
+}
+
+/** Mirrors pick_cta_colors in services/video_assembler.py. */
+function ctaColors(primary: string, accent: string): { bg: string; fg: string } {
+  const lum = (hex: string) => {
+    const h = hex.replace("#", "");
+    if (h.length !== 6) return 0;
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  };
+  for (const c of [accent, primary]) {
+    const l = lum(c);
+    // A near-black brand colour disappears into the scrim it sits on.
+    if (l > 0.3) return { bg: c, fg: l > 0.62 ? "#0b0d14" : "#ffffff" };
+  }
+  return { bg: "#ffffff", fg: "#0b0d14" };
 }
 
 function fmt(seconds: number) {
@@ -144,12 +189,15 @@ interface Props {
 export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Props) {
   const { script, scraped } = result;
   const videoRef = useRef<HTMLVideoElement>(null);
-  const lanesRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("scenes");
+  // Timeline magnification. 1 = the whole ad across the panel; above that
+  // the track overflows and scrolls, which is how you read a 12-scene cut.
+  const [zoom, setZoom] = useState(1);
   const [pickerScene, setPickerScene] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const [saved, setSaved] = useState(false);
   const [globalSaved, setGlobalSaved] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState("");
@@ -162,7 +210,17 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
     bannerStore.getServerSnapshot
   );
 
-  const { thumbs, duration } = useSceneThumbs(videoSrc, SCENE_COUNT);
+  // How many scenes the file on screen was actually cut into. `??` alone
+  // would let a 0 through, and every scene calculation divides by this — a
+  // zero count means NaN timecodes and an empty editor.
+  const renderedScenes = result.scene_count || DEFAULT_SCENE_COUNT;
+
+  // The end card in the file on screen — not the one being edited.
+  const renderedTail = result.has_end_card ? ENDCARD_SECONDS : 0;
+  const { thumbs, duration } = useSceneThumbs(videoSrc, renderedScenes, renderedTail);
+
+  // Where the footage stops and the card takes over, in the current file.
+  const footageEnd = duration ? Math.max(0.1, duration - renderedTail) : 0;
 
   const scenesRaw = useSyncExternalStore(
     scenesStore.subscribe,
@@ -170,14 +228,36 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
     scenesStore.getServerSnapshot
   );
 
-  const sceneOverrides = useMemo<SceneOverrides>(() => {
-    if (!scenesRaw) return {};
+  // What the file on screen is actually made of, one entry per scene. The
+  // backend names the source it used so a scene can be handed back by name;
+  // "" means it came from a screenshot or stock clip and cannot be.
+  const baseSlots = useMemo<SceneSlot[]>(() => {
+    const srcs = result.scene_sources ?? [];
+    return Array.from({ length: renderedScenes }, (_, i) => ({
+      src: srcs[i] ?? "",
+      kind: (srcs[i] ? "page" : "auto") as SceneSlot["kind"],
+      thumbIndex: i,
+    }));
+  }, [result.scene_sources, renderedScenes]);
+
+  // Stamped with the render it was built against. Even if a reset is missed
+  // somewhere, a list from a different ad is ignored rather than pasted into
+  // whatever is on screen now.
+  const editedSlots = useMemo<SceneSlot[] | null>(() => {
+    if (!scenesRaw) return null;
     try {
-      return JSON.parse(scenesRaw) as SceneOverrides;
+      const parsed = JSON.parse(scenesRaw) as Partial<SceneEdit>;
+      if (parsed.renderId !== result.render_id) return null;
+      return Array.isArray(parsed.slots) ? parsed.slots : null;
     } catch {
-      return {};
+      return null;
     }
-  }, [scenesRaw]);
+  }, [scenesRaw, result.render_id]);
+
+  const slots = editedSlots ?? baseSlots;
+  const sceneCount = slots.length;
+  const slotsDirty =
+    editedSlots !== null && JSON.stringify(editedSlots) !== JSON.stringify(baseSlots);
 
   const storedBanner = useMemo<Partial<BannerData>>(() => {
     if (!bannerRaw) return {};
@@ -197,31 +277,58 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
     primaryColor: scraped.colors?.primary  ?? "#1a1a2e",
     accentColor:  scraped.colors?.accent   ?? "#6c63ff",
     banner: {
-      companyName: scraped.business_name ?? "",
-      phone:       "",
-      address:     "",
-      website:     "",
+      companyName: result.end_card?.company_name ?? scraped.business_name ?? "",
+      phone:       result.end_card?.phone   ?? "",
+      email:       result.end_card?.email   ?? "",
+      address:     result.end_card?.address ?? "",
+      website:     result.end_card?.website ?? "",
     },
   });
 
   // Saved banner values take precedence over this component's initial state.
   const banner = { ...edits.banner, ...storedBanner };
 
+  // What the renderer would be sent. Mirrors EndCard in models/generate.py.
+  const cardDetails: EndCardData = {
+    company_name: banner.companyName.trim(),
+    phone:        banner.phone.trim(),
+    email:        banner.email.trim(),
+    address:      banner.address.trim(),
+    website:      banner.website.trim(),
+  };
+
+  // A company name alone is not an end card — and the name is pre-filled from
+  // the scrape, so treating it as content would bolt three seconds of card
+  // onto every re-render whether or not anyone opened this panel. At least one
+  // way to get in touch has to be there.
+  const hasCardData = Boolean(
+    cardDetails.phone || cardDetails.email || cardDetails.address || cardDetails.website
+  );
+
+  const renderedCard = result.end_card;
+  const cardDirty =
+    hasCardData !== Boolean(result.has_end_card) ||
+    (hasCardData &&
+      (cardDetails.company_name !== (renderedCard?.company_name ?? "") ||
+        cardDetails.phone       !== (renderedCard?.phone   ?? "") ||
+        cardDetails.email       !== (renderedCard?.email   ?? "") ||
+        cardDetails.address     !== (renderedCard?.address ?? "") ||
+        cardDetails.website     !== (renderedCard?.website ?? "")));
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function set<K extends keyof Edits>(key: K, value: Edits[K]) {
-    setSaved(false);
     setEdits((e) => ({ ...e, [key]: value }));
   }
 
   function setBanner(field: keyof Edits["banner"], value: string) {
-    setSaved(false);
     const next = { ...banner, [field]: value };
     setEdits((e) => ({ ...e, banner: next }));
     // Publish immediately so the result page's panel reflects it.
     bannerStore.write({
       companyName:  next.companyName,
       phone:        next.phone,
+      email:        next.email,
       address:      next.address,
       website:      next.website,
       primaryColor: edits.primaryColor,
@@ -229,27 +336,72 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
     });
   }
 
+  function writeSlots(next: SceneSlot[]) {
+    scenesStore.write({ renderId: result.render_id, slots: next });
+  }
+
+  /** Swap one scene's picture for an upload or a stock photo. */
   function pickScene(index: number, override: SceneOverride) {
-    scenesStore.write({ ...sceneOverrides, [String(index)]: override });
+    const next = slots.map((s, i) =>
+      i === index
+        ? {
+            ...s,
+            src: override.src,
+            kind: override.kind,
+            credit: override.credit,
+            creditUrl: override.creditUrl,
+          }
+        : s
+    );
+    writeSlots(next);
     setPickerScene(null);
-    setSaved(false);
   }
 
+  /** Append a scene and open the picker on it straight away. */
+  function addScene() {
+    if (sceneCount >= MAX_SCENES) return;
+    setActiveTab("scenes");
+    // No thumbIndex: no render has produced this one, so there is no frame to
+    // show for it and nowhere to seek to.
+    writeSlots([...slots, { src: "", kind: "auto" }]);
+    setPickerScene(sceneCount);
+  }
+
+  /** Remove a scene outright. The rest keep their own pictures. */
+  function deleteScene(index: number) {
+    if (sceneCount <= 1) return;   // an ad with no scenes is not an ad
+    writeSlots(slots.filter((_, i) => i !== index));
+    setPickerScene(null);
+  }
+
+  /** Put a scene back to whatever the current render used for it. */
   function clearScene(index: number) {
-    const next = { ...sceneOverrides };
-    delete next[String(index)];
-    scenesStore.write(next);
-    setSaved(false);
+    const slot = slots[index];
+    const original =
+      slot.thumbIndex != null ? baseSlots[slot.thumbIndex] : undefined;
+    writeSlots(
+      slots.map((s, i) => (i === index ? original ?? { src: "", kind: "auto" } : s))
+    );
   }
 
-  /** The image shown for a scene: the user's replacement, else the real frame. */
+  /** The picture shown for a scene: the chosen image, else its rendered frame. */
   function sceneImage(i: number): string {
-    return sceneOverrides[String(i)]?.src || thumbs[i] || "";
+    const slot = slots[i];
+    if (!slot) return "";
+    if (slot.kind === "upload" || slot.kind === "stock") return slot.src;
+    if (slot.thumbIndex != null) return thumbs[slot.thumbIndex] ?? "";
+    return "";
   }
 
   function sceneRange(i: number): string {
     if (!duration) return "—";
-    const per = duration / SCENE_COUNT;
+    // Once the list has been edited these are where the scenes *will* fall,
+    // not where they are now — the panel header says so.
+    const footage = Math.max(
+      0.1,
+      duration - (hasCardData ? ENDCARD_SECONDS : 0)
+    );
+    const per = footage / sceneCount;
     return `${fmt(per * i)} – ${fmt(per * (i + 1))}`;
   }
 
@@ -262,15 +414,43 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
       }))
     : [];
 
-  const activeScene = duration
-    ? Math.min(SCENE_COUNT - 1, Math.floor((currentTime / duration) * SCENE_COUNT))
-    : 0;
+  // The player shows the *rendered* file, so text and scene edits are
+  // invisible until a re-render. When anything differs, overlay a live
+  // composition instead so you can see what you are actually changing.
+  const dirty =
+    edits.headline !== script.headline ||
+    edits.subtext !== script.subtext ||
+    edits.cta !== script.cta ||
+    // The renderer re-synthesises narration from this, so it very much counts
+    // as a change — leaving it out left Save disabled after a script rewrite.
+    edits.voiceover !== script.voiceover ||
+    edits.musicStyle !== script.music_style ||
+    edits.primaryColor !== (scraped.colors?.primary ?? "#1a1a2e") ||
+    edits.accentColor !== (scraped.colors?.accent ?? "#6c63ff") ||
+    // The end card is composited into the MP4 now, so changing it really does
+    // change the file. While it was preview-only this was deliberately left
+    // out, because re-rendering would have returned an identical video.
+    cardDirty ||
+    // Adding, deleting or replacing a scene all change how the footage is
+    // cut, even when no new picture was chosen.
+    slotsDirty;
 
-  function handleApply() {
-    sessionStorage.setItem("adcraft_edits", JSON.stringify(edits));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2200);
-  }
+  // -1 while the end card is on screen: no scene is showing then, so the
+  // Scenes panel should not claim one is.
+  const playingSceneOfRender =
+    !duration ? 0
+    : currentTime >= footageEnd ? -1
+    : Math.min(
+        renderedScenes - 1,
+        Math.floor((currentTime / footageEnd) * renderedScenes)
+      );
+
+  // Which *slot* that corresponds to. After a delete the two no longer line
+  // up, so the highlight follows the slot that owns the frame on screen.
+  const activeScene =
+    playingSceneOfRender < 0
+      ? -1
+      : slots.findIndex((s) => s.thumbIndex === playingSceneOfRender);
 
   async function handleSaveExport() {
     sessionStorage.setItem("adcraft_edits", JSON.stringify(edits));
@@ -300,16 +480,60 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
           music_style: edits.musicStyle,
           scene_description: script.scene_description ?? "",
         },
-        // "" keeps the scene as-is; the backend re-shoots those from the site.
-        scene_images: Array.from(
-          { length: SCENE_COUNT },
-          (_, i) => sceneOverrides[String(i)]?.src ?? ""
-        ),
+        // One entry per scene, in order. A named source is re-fetched as-is,
+        // so a scene survives its neighbours being deleted; "" asks the
+        // backend to fill that slot from the page's own photography.
+        scene_images: slots.map((s) => s.src),
+        // Without these the backend would re-shoot un-replaced scenes from the
+        // site, losing the photography the ad was originally cut from.
+        content_images: scraped.images ?? [],
+        // Omitted entirely when there is nothing to put on it, so the ad keeps
+        // its full duration of footage.
+        end_card: hasCardData ? cardDetails : undefined,
+        // Say the count outright. Inferring it from "entries that carry an
+        // image" would silently drop a slot the user added but left empty.
+        scene_count: sceneCount,
       });
 
       // Writing the store re-renders the page with the new file, which flows
       // back down as a fresh videoSrc. This component keeps its edit state.
-      resultStore.write({ ...result, video_url: fresh.video_url, render_id: fresh.render_id });
+      // Store the edited script too. Without this `dirty` stays true and the
+      // preview keeps covering a render that already matches it.
+      resultStore.write({
+        ...result,
+        video_url: fresh.video_url,
+        render_id: fresh.render_id,
+        // A re-render does not always cut the same number of scenes — a
+        // partial swap with no page images to fill the gaps yields fewer.
+        // Dropping this left the scene list and timeline splitting the new
+        // file into the *old* count, so every thumbnail was off.
+        scene_count: fresh.scene_count ?? result.scene_count,
+        scene_sources: fresh.scene_sources ?? [],
+        // What the new file actually contains, so `cardDirty` settles back to
+        // false and the preview stops covering a render that already matches.
+        has_end_card: fresh.has_end_card ?? false,
+        end_card_at: fresh.end_card_at ?? null,
+        end_card: hasCardData ? cardDetails : undefined,
+        script: {
+          ...result.script,
+          headline: edits.headline,
+          subtext: edits.subtext,
+          cta: edits.cta,
+          voiceover: edits.voiceover,
+          music_style: edits.musicStyle,
+        },
+        scraped: {
+          ...result.scraped,
+          colors: {
+            primary: edits.primaryColor,
+            secondary: scraped.colors?.secondary ?? "#ffffff",
+            accent: edits.accentColor,
+          },
+        },
+      });
+      // The new file *is* the scene list now, so the edit layer goes away
+      // and baseSlots is rebuilt from the render that just landed.
+      scenesStore.clear();
 
       setGlobalSaved(true);
       setTimeout(() => setGlobalSaved(false), 2500);
@@ -324,7 +548,7 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
 
   /** Map a click anywhere in the lane area to a timecode. */
   function scrubTo(clientX: number) {
-    const el = lanesRef.current;
+    const el = trackRef.current;
     const v = videoRef.current;
     if (!el || !v || !duration) return;
     const rect = el.getBoundingClientRect();
@@ -336,17 +560,48 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
   /** Jump the preview to the start of a scene. */
   function showScene(i: number) {
     const v = videoRef.current;
-    if (!v || !duration) return;
-    const at = (duration / SCENE_COUNT) * i;
+    const at2 = slots[i]?.thumbIndex;
+    // Seek to where this scene sits in the file on screen. A slot no render
+    // has produced has nowhere to go, and after a delete the list index and
+    // the file's own scene order no longer agree — hence thumbIndex.
+    if (!v || !duration || at2 == null) return;
+    const at = (footageEnd / renderedScenes) * at2;
     v.currentTime = at;
     setCurrentTime(at);
   }
 
+  // Follow the playhead when zoomed in, or it runs off the visible slice and
+  // the timeline stops describing what you are watching. Only while playing,
+  // so it never fights a scroll you made yourself.
+  useEffect(() => {
+    if (!playing || zoom === 1) return;
+    const sc = scrollRef.current;
+    const tr = trackRef.current;
+    if (!sc || !tr || !duration) return;
+
+    const x = (currentTime / duration) * tr.clientWidth;
+    const left = sc.scrollLeft;
+    const right = left + sc.clientWidth;
+    if (x < left + 40 || x > right - 80) {
+      sc.scrollLeft = Math.max(0, x - sc.clientWidth / 2);
+    }
+  }, [currentTime, playing, zoom, duration]);
+
   function togglePlay() {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) { v.play(); setPlaying(true); }
-    else          { v.pause(); setPlaying(false); }
+    if (v.paused) {
+      // play() rejects if the browser blocks it or the source is still
+      // loading. Setting `playing` optimistically left the button stuck on
+      // pause over a video that never started.
+      v.play().then(
+        () => setPlaying(true),
+        () => setPlaying(false)
+      );
+    } else {
+      v.pause();
+      setPlaying(false);
+    }
   }
 
   // ── Panel content ──────────────────────────────────────────────────────────
@@ -358,13 +613,14 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
           <div className="ve-panel-header">
             <div className="ve-panel-title">Scenes</div>
             <div className="ve-panel-sub">
-              Three shots of your site, split evenly across the ad
+              {sceneCount} shots, split evenly across the footage
+              {result.has_end_card ? " before the end card" : ""}
             </div>
           </div>
           <div className="ve-panel-body">
             <div className="ve-scene-list">
-              {Array.from({ length: SCENE_COUNT }, (_, i) => {
-                const override = sceneOverrides[String(i)];
+              {slots.map((slot, i) => {
+                const swapped = slot.kind === "upload" || slot.kind === "stock";
                 const img = sceneImage(i);
                 return (
                   <div
@@ -400,6 +656,20 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                       >
                         Change
                       </button>
+                      {sceneCount > 1 && (
+                        <button
+                          className="ve-scene-delete"
+                          id={`ve-scene-delete-${i}`}
+                          title={`Delete scene ${i + 1}`}
+                          aria-label={`Delete scene ${i + 1}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteScene(i);
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
                     <div className="ve-scene-meta">
                       <p className="ve-scene-name">Scene #{i + 1}</p>
@@ -407,20 +677,28 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                       {activeScene === i && (
                         <p className="ve-scene-now">Currently visible</p>
                       )}
-                      {override && (
+                      {slot.thumbIndex == null && !swapped && (
+                        <p className="ve-scene-hint">
+                          Pick an image, or leave it and we&rsquo;ll use one from
+                          your site
+                        </p>
+                      )}
+                      {swapped && (
                         <p className="ve-scene-swapped">
                           <span className="ve-scene-src">
-                            {override.kind === "upload" ? "Your image" : `Stock · ${override.credit}`}
+                            {slot.kind === "upload" ? "Your image" : `Stock · ${slot.credit}`}
                           </span>
-                          <button
-                            className="ve-scene-reset"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              clearScene(i);
-                            }}
-                          >
-                            Reset
-                          </button>
+                          {slot.thumbIndex != null && (
+                            <button
+                              className="ve-scene-reset"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                clearScene(i);
+                              }}
+                            >
+                              Reset
+                            </button>
+                          )}
                         </p>
                       )}
                     </div>
@@ -428,6 +706,33 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                 );
               })}
             </div>
+
+            <div className="ve-scene-actions">
+              <button
+                id="ve-add-scene"
+                className="ve-add-scene"
+                onClick={addScene}
+                disabled={sceneCount >= MAX_SCENES}
+              >
+                + Add scene
+              </button>
+              {slotsDirty && (
+                <button
+                  id="ve-reset-scenes"
+                  className="ve-remove-scene"
+                  onClick={() => scenesStore.clear()}
+                  title="Put the scene list back to the rendered ad"
+                >
+                  Reset all
+                </button>
+              )}
+            </div>
+            {sceneCount >= MAX_SCENES && (
+              <p className="ve-panel-note">
+                {MAX_SCENES} scenes is the maximum — past that each shot is too
+                brief to register.
+              </p>
+            )}
           </div>
         </>
       );
@@ -539,11 +844,14 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
         </>
       );
 
-      case "banner": return (
+      case "endcard": return (
         <>
           <div className="ve-panel-header">
-            <div className="ve-panel-title">🏷️ Bottom Banner</div>
-            <div className="ve-panel-sub">Company info shown at the bottom</div>
+            <div className="ve-panel-title">📇 End Card</div>
+            <div className="ve-panel-sub">
+              The ad’s closing {ENDCARD_SECONDS} seconds — your logo, name and
+              how to get in touch
+            </div>
           </div>
           <div className="ve-panel-body">
             <VeField label="Company Name" id="ve-banner-company">
@@ -556,29 +864,47 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                 placeholder="+1 (800) 555-0100"
                 onChange={(e) => setBanner("phone", e.target.value)} />
             </VeField>
-            <VeField label="Address" id="ve-banner-address">
-              <input id="ve-banner-address" className="ve-input" value={banner.address}
-                placeholder="One Bowerman Drive, OR"
-                onChange={(e) => setBanner("address", e.target.value)} />
+            <VeField label="Email" id="ve-banner-email">
+              <input id="ve-banner-email" className="ve-input" type="email" value={banner.email}
+                placeholder="hello@nike.com"
+                onChange={(e) => setBanner("email", e.target.value)} />
             </VeField>
             <VeField label="Website" id="ve-banner-website">
               <input id="ve-banner-website" className="ve-input" value={banner.website}
                 placeholder="nike.com"
                 onChange={(e) => setBanner("website", e.target.value)} />
             </VeField>
+            <VeField label="Address" id="ve-banner-address">
+              <input id="ve-banner-address" className="ve-input" value={banner.address}
+                placeholder="One Bowerman Drive, OR"
+                onChange={(e) => setBanner("address", e.target.value)} />
+            </VeField>
+            <p className="ve-panel-note">
+              {hasCardData
+                ? `The card uses your brand colour and logo, and replaces the last ${ENDCARD_SECONDS}s of footage.`
+                : "Add a phone number, email, website or address and the card is added to the end of your ad."}
+            </p>
           </div>
         </>
       );
     }
   }
 
-  const hasBannerData = Boolean(
-    banner.companyName || banner.phone || banner.address || banner.website
-  );
+  // Where the card takes over, mirroring the renderer.
+  const cardStart = duration ? Math.max(0, duration - ENDCARD_SECONDS) : 0;
 
-  const showBanner = activeTab === "banner" && (
-    banner.companyName || banner.phone || banner.address || banner.website
-  );
+  // How much of the timeline's width the footage occupies. The scene clips are
+  // laid out inside this, so they stop where the end card starts.
+  const footagePct = duration ? (footageEnd / duration) * 100 : 100;
+  const inCardWindow = duration > 0 && currentTime >= cardStart;
+
+  // Show the card over the player while you are building it, and whenever the
+  // playhead is in its window but the rendered file does not match yet.
+  const showCardPreview = hasCardData && (activeTab === "endcard" || (cardDirty && inCardWindow));
+
+  // Captions stop when the card starts, so the live caption preview has to as
+  // well — otherwise it previews a frame the renderer will never produce.
+  const showLiveCaptions = dirty && !playing && !(hasCardData && inCardWindow);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -633,13 +959,21 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
         {/* Edit panel */}
         <div className="ve-edit-panel">
           {renderPanel()}
+          {/* One commit action, not two. "Apply Changes" used to live here and
+              only wrote to sessionStorage — edits already show in the preview,
+              so it read as the button that should have applied them. */}
           <div className="ve-panel-save">
             <button
               id="ve-apply-btn"
-              className={`ve-apply-btn${saved ? " saved" : ""}`}
-              onClick={handleApply}
+              className="ve-apply-btn"
+              onClick={handleSaveExport}
+              disabled={rendering || !dirty}
             >
-              {saved ? "✅ Applied!" : "✔ Apply Changes"}
+              {rendering
+                ? "Re-rendering…"
+                : dirty
+                ? "Save & re-render"
+                : "No changes to apply"}
             </button>
           </div>
         </div>
@@ -655,28 +989,72 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                 crossOrigin="anonymous"
                 controls={false}
                 onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                // Track the element's real state rather than guessing at it in
+                // togglePlay — the video also stops on its own (end of file,
+                // a stalled source), and the button used to keep showing
+                // "pause" over a video that was not playing.
+                onPlay={() => setPlaying(true)}
+                onPause={() => setPlaying(false)}
                 onEnded={() => setPlaying(false)}
                 style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
               />
-              {/* Live banner preview overlay */}
-              {showBanner && (
-                <div
-                  className="ve-banner-overlay"
-                  style={{ background: edits.primaryColor }}
-                >
-                  <span className="ve-banner-company">
-                    {banner.companyName}
-                  </span>
-                  <div className="ve-banner-contacts">
-                    {banner.phone   && <span>📞 {banner.phone}</span>}
-                    {banner.address && <span>📍 {banner.address}</span>}
-                  </div>
-                  {banner.website && (
+              {/* Live composition of the current edits. Geometry mirrors
+                  assemble_with_ffmpeg: a black scrim at alpha 150, headline
+                  64px at y=180, subtext 36px at y=340, CTA at y=520 on a
+                  1280x720 frame — expressed here as cq units so it scales. */}
+              {showLiveCaptions && (
+                <div className="ve-live" aria-hidden="true">
+                  {sceneImage(activeScene) && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img className="ve-live-bg" src={sceneImage(activeScene)} alt="" />
+                  )}
+                  <div className="ve-live-scrim" />
+                  <p className="ve-live-headline">{edits.headline}</p>
+                  <p className="ve-live-subtext">{edits.subtext}</p>
+                  {edits.cta && (
                     <span
-                      className="ve-banner-pill"
-                      style={{ background: edits.accentColor }}
+                      className="ve-live-cta"
+                      style={(() => {
+                        const c = ctaColors(edits.primaryColor, edits.accentColor);
+                        return { background: c.bg, color: c.fg };
+                      })()}
                     >
-                      {banner.website}
+                      {edits.cta}
+                    </span>
+                  )}
+                  <span className="ve-live-chip">
+                    Preview of your edits — press play to watch the current render
+                  </span>
+                </div>
+              )}
+
+              {/* The closing card, drawn the way the renderer draws it. */}
+              {showCardPreview && (
+                <div
+                  className="ve-endcard"
+                  style={{ background: edits.primaryColor }}
+                  aria-hidden="true"
+                >
+                  {scraped.logo_url && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img className="ve-endcard-logo" src={scraped.logo_url} alt="" />
+                  )}
+                  {banner.companyName && (
+                    <p className="ve-endcard-name">{banner.companyName}</p>
+                  )}
+                  {banner.companyName && (
+                    <span
+                      className="ve-endcard-rule"
+                      style={{ background: edits.accentColor }}
+                    />
+                  )}
+                  {banner.phone   && <p className="ve-endcard-row">{banner.phone}</p>}
+                  {banner.email   && <p className="ve-endcard-row">{banner.email}</p>}
+                  {banner.website && <p className="ve-endcard-row">{banner.website}</p>}
+                  {banner.address && <p className="ve-endcard-row">{banner.address}</p>}
+                  {cardDirty && (
+                    <span className="ve-live-chip">
+                      Preview of your end card — save to render it
                     </span>
                   )}
                 </div>
@@ -694,6 +1072,39 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                 {fmt(currentTime)} / {fmt(duration)}
               </span>
               <span className="ve-tl-hint">Click the timeline to scrub</span>
+
+              <div className="ve-tl-zoom">
+                <button
+                  id="ve-zoom-out"
+                  className="ve-zoom-btn"
+                  onClick={() => setZoom((z) => Math.max(1, z / ZOOM_STEP))}
+                  disabled={zoom <= 1}
+                  title="Zoom out"
+                  aria-label="Zoom out"
+                >
+                  −
+                </button>
+                <span className="ve-zoom-val">{Math.round(zoom * 100)}%</span>
+                <button
+                  id="ve-zoom-in"
+                  className="ve-zoom-btn"
+                  onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * ZOOM_STEP))}
+                  disabled={zoom >= MAX_ZOOM}
+                  title="Zoom in"
+                  aria-label="Zoom in"
+                >
+                  +
+                </button>
+                <button
+                  id="ve-zoom-fit"
+                  className="ve-zoom-btn wide"
+                  onClick={() => setZoom(1)}
+                  disabled={zoom === 1}
+                  title="Fit the whole ad"
+                >
+                  Fit
+                </button>
+              </div>
             </div>
 
             {/* Lanes. Widths are the real thing: the renderer splits the
@@ -701,21 +1112,37 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                 duration. The banner lane is dashed because it is previewed
                 here but is not in the MP4 yet. */}
             <div className="ve-tl-body">
+              {/* Each lane opens the panel that edits it — a timeline where
+                  clicking the Music track does nothing is just a picture. */}
               <div className="ve-tl-gutter">
                 <span className="ve-tl-gutter-head" />
-                <span className="ve-tl-lane-label">Video</span>
-                <span className="ve-tl-lane-label">Voice</span>
-                <span className="ve-tl-lane-label">Music</span>
-                {hasBannerData && <span className="ve-tl-lane-label">Banner</span>}
+                {LANES.filter((l) => l.id !== "endcard" || hasCardData).map((lane) => (
+                  <button
+                    key={lane.id}
+                    type="button"
+                    id={`ve-lane-${lane.id}`}
+                    className={`ve-tl-lane-label${activeTab === lane.tab ? " active" : ""}`}
+                    onClick={() => setActiveTab(lane.tab)}
+                    title={`Edit ${lane.label.toLowerCase()}`}
+                  >
+                    {lane.label}
+                  </button>
+                ))}
               </div>
 
-              <div
-                className="ve-tl-lanes"
-                ref={lanesRef}
-                onClick={(e) => scrubTo(e.clientX)}
-                role="presentation"
-              >
-                <div className="ve-tl-ruler">
+              {/* The track is the only thing that scales. Clip positions stay
+                  in % of it, so they remain true to time at any zoom. */}
+              <div className="ve-tl-scroll" ref={scrollRef}>
+                <div
+                  className="ve-tl-track"
+                  ref={trackRef}
+                  style={{ width: `${zoom * 100}%` }}
+                >
+                <div
+                  className="ve-tl-ruler"
+                  onClick={(e) => scrubTo(e.clientX)}
+                  role="presentation"
+                >
                   {ticks.map((t) => (
                     <span
                       key={t.at}
@@ -727,44 +1154,121 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                   ))}
                 </div>
 
-                <div className="ve-lane">
-                  {Array.from({ length: SCENE_COUNT }, (_, i) => {
+                <div
+                  className={`ve-lane${activeTab === "scenes" ? " active" : ""}`}
+                  onClick={(e) => scrubTo(e.clientX)}
+                  role="presentation"
+                >
+                  {/* The scenes share the footage, which ends where the
+                      card begins. Laying them across the whole duration made
+                      the last clip sit underneath the end card's lane. */}
+                  {slots.map((slot, i) => {
                     const img = sceneImage(i);
+                    const span = (footagePct / sceneCount);
+                    // Nothing rendered behind this one yet, so it cannot be
+                    // scrubbed to.
+                    const pending = slot.thumbIndex == null;
                     return (
                       <div
                         key={i}
-                        className={`ve-clip ve-clip-video${activeScene === i ? " current" : ""}`}
-                        style={{
-                          left: `${(i / SCENE_COUNT) * 100}%`,
-                          width: `${(1 / SCENE_COUNT) * 100}%`,
+                        className={
+                          "ve-clip ve-clip-video" +
+                          (activeScene === i ? " current" : "") +
+                          (pending ? " pending" : "")
+                        }
+                        style={{ left: `${span * i}%`, width: `${span}%` }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveTab("scenes");
+                          // A slot with no footage behind it cannot be seeked
+                          // to, so open its picker instead.
+                          if (pending) setPickerScene(i);
+                          else showScene(i);
                         }}
+                        role="presentation"
                       >
                         {img && (
                           /* eslint-disable-next-line @next/next/no-img-element */
                           <img src={img} alt="" />
                         )}
-                        <span className="ve-clip-name">Scene {i + 1}</span>
+                        {/* "Scene" drops out on a narrow clip (container
+                            query in editor.css) so the number always fits. */}
+                        <span className="ve-clip-name">
+                          <span className="ve-clip-word">Scene </span>
+                          {i + 1}
+                        </span>
                       </div>
                     );
                   })}
+
                 </div>
 
-                <div className="ve-lane">
-                  <div className="ve-clip ve-clip-voice" style={{ left: 0, width: "100%" }}>
+                <div
+                  className={`ve-lane${activeTab === "voiceover" ? " active" : ""}`}
+                  onClick={(e) => scrubTo(e.clientX)}
+                  role="presentation"
+                >
+                  <div
+                    className="ve-clip ve-clip-voice"
+                    style={{ left: 0, width: "100%" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("voiceover");
+                    }}
+                    role="presentation"
+                  >
                     <span className="ve-clip-name">Voiceover</span>
                   </div>
                 </div>
 
-                <div className="ve-lane">
-                  <div className="ve-clip ve-clip-music" style={{ left: 0, width: "100%" }}>
+                <div
+                  className={`ve-lane${activeTab === "music" ? " active" : ""}`}
+                  onClick={(e) => scrubTo(e.clientX)}
+                  role="presentation"
+                >
+                  <div
+                    className="ve-clip ve-clip-music"
+                    style={{ left: 0, width: "100%" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("music");
+                    }}
+                    role="presentation"
+                  >
                     <span className="ve-clip-name">Music bed — {edits.musicStyle}</span>
                   </div>
                 </div>
 
-                {hasBannerData && (
-                  <div className="ve-lane">
-                    <div className="ve-clip ve-clip-pending" style={{ left: 0, width: "100%" }}>
-                      <span className="ve-clip-name">Bottom banner — preview only</span>
+                {hasCardData && (
+                  <div
+                    className={`ve-lane${activeTab === "endcard" ? " active" : ""}`}
+                    onClick={(e) => scrubTo(e.clientX)}
+                    role="presentation"
+                  >
+                    {/* Sits at the end, the length it actually runs for — it is
+                        a real segment of the video now, not a full-width
+                        placeholder for something that never rendered. */}
+                    <div
+                      className="ve-clip ve-clip-endcard"
+                      style={
+                        duration
+                          ? {
+                              left:  `${(cardStart / duration) * 100}%`,
+                              width: `${(ENDCARD_SECONDS / duration) * 100}%`,
+                            }
+                          : { left: "80%", width: "20%" }
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveTab("endcard");
+                        if (duration) {
+                          const v = videoRef.current;
+                          if (v) { v.currentTime = cardStart; setCurrentTime(cardStart); }
+                        }
+                      }}
+                      role="presentation"
+                    >
+                      <span className="ve-clip-name">End card</span>
                     </div>
                   </div>
                 )}
@@ -778,6 +1282,28 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                     <span className="ve-playhead-grip" />
                   </div>
                 )}
+                </div>
+              </div>
+
+              {/* Outside the track on purpose. Inside it, the button either
+                  fell off the right edge (no end card, so the clips reach
+                  100%) or sat on top of the last clip. */}
+              <div className="ve-tl-aside">
+                <span className="ve-tl-gutter-head" />
+                <button
+                  id="ve-tl-add-scene"
+                  className="ve-add-slot"
+                  onClick={addScene}
+                  disabled={sceneCount >= MAX_SCENES}
+                  title={
+                    sceneCount >= MAX_SCENES
+                      ? `${MAX_SCENES} scenes is the maximum`
+                      : "Add a scene"
+                  }
+                  aria-label="Add a scene"
+                >
+                  +
+                </button>
               </div>
             </div>
           </div>

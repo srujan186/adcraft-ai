@@ -80,11 +80,11 @@ export const FEATURES: MarketingContent[] = [
     slug: "video-editor",
     eyebrow: "Feature",
     title: "Video editor",
-    lead: "Adjust the text, voice, music, colours and banner after the first render.",
+    lead: "Adjust the text, voice, music, colours and end card after the first render.",
     metaDescription:
-      "Refine your generated ad in a full-screen editor — headline, script, music, brand colours and contact banner.",
+      "Refine your generated ad in a full-screen editor — headline, script, music, brand colours and closing contact card.",
     intro:
-      "The first render is a starting point. The editor opens full-screen over the result page with tabs for text, voiceover, music, colours and the bottom banner, alongside a live preview of the video and a timeline view of the layers that make it up.",
+      "The first render is a starting point. The editor opens full-screen over the result page with tabs for text, voiceover, music, colours and the end card, alongside a live preview of the video and a timeline view of the layers that make it up.",
     points: [
       {
         title: "Every text field",
@@ -95,8 +95,8 @@ export const FEATURES: MarketingContent[] = [
         desc: "Primary and accent colours can be overridden with colour pickers if the scraper picked the wrong ones.",
       },
       {
-        title: "Contact banner",
-        desc: "Add a company name, phone number, address and website to a banner rendered along the bottom of the video.",
+        title: "Contact end card",
+        desc: "Add a company name, phone number, email, address and website to a card that closes the ad, under your logo and brand colour.",
       },
     ],
   },

@@ -8,6 +8,16 @@ if sys.platform == "win32":
 import multiprocessing
 multiprocessing.freeze_support()
 
+# The pipeline logs progress with emoji. When stdout is not UTF-8 — Windows with
+# output redirected to a file, or a container with a C/POSIX locale — those
+# prints raise UnicodeEncodeError from inside a request handler and turn a clean
+# response into a broken one. Force UTF-8 rather than police every print.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +27,7 @@ import os
 
 from routers.scrape   import router as scrape_router
 from routers.generate import router as generate_router
+from routers.media    import router as media_router
 
 load_dotenv()
 
@@ -63,6 +74,7 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(scrape_router)
 app.include_router(generate_router)
+app.include_router(media_router)
 
 # ── Output directory ──────────────────────────────────────────────────────────
 # Generated MP4s are served by GET /api/output/{filename} in routers/generate.py.
@@ -71,6 +83,54 @@ app.include_router(generate_router)
 # path-traversal checking StaticFiles does. The router handler does its own now.
 _output_dir = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(_output_dir, exist_ok=True)
+
+# ── Asset check ───────────────────────────────────────────────────────────────
+# The Kokoro weights and the music beds are git-lfs files. A checkout or Docker
+# build without `git lfs pull` leaves ~130-byte pointer files in their place;
+# Kokoro then fails to load, the audio step swallows the error, and every render
+# is silent while still returning "status": "done". That is expensive to notice
+# from the outside, so say it loudly once at boot.
+_LFS_MAGIC = b"version https://git-lfs"
+
+
+def _check_assets() -> None:
+    base = os.path.dirname(os.path.abspath(__file__))
+    required = [
+        os.path.join(base, "models", "kokoro-v1.0.int8.onnx"),
+        os.path.join(base, "models", "voices-v1.0.bin"),
+    ]
+    music_dir = os.path.join(base, "music")
+    if os.path.isdir(music_dir):
+        required += [
+            os.path.join(music_dir, f)
+            for f in os.listdir(music_dir)
+            if f.lower().endswith(".mp3")
+        ]
+
+    missing, pointers = [], []
+    for path in required:
+        if not os.path.exists(path):
+            missing.append(os.path.basename(path))
+            continue
+        try:
+            with open(path, "rb") as fh:
+                if fh.read(len(_LFS_MAGIC)) == _LFS_MAGIC:
+                    pointers.append(os.path.basename(path))
+        except OSError:
+            missing.append(os.path.basename(path))
+
+    if missing:
+        print(f"[assets] MISSING: {', '.join(missing)}")
+    if pointers:
+        print(f"[assets] git-lfs POINTERS, not real files: {', '.join(pointers)}")
+    if missing or pointers:
+        print("[assets] Run `git lfs pull`. Until then renders will have no audio.")
+    else:
+        print(f"[assets] ok - {len(required)} media files present")
+
+
+_check_assets()
+
 
 # ── Health / root ─────────────────────────────────────────────────────────────
 @app.get("/api/health")

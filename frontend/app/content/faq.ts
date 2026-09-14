@@ -34,7 +34,7 @@ export const FAQ: FaqItem[] = [
   },
   {
     q: "Can I change the script before it goes out?",
-    a: "Yes. The full script — headline, subtext, call to action and the complete voiceover — is shown on the result page, and the editor lets you rewrite any of it, adjust your brand colours and add a contact banner.",
+    a: "Yes. The full script — headline, subtext, call to action and the complete voiceover — is shown on the result page, and the editor lets you rewrite any of it, adjust your brand colours and add a closing card with your contact details.",
   },
   {
     q: "Do my edits change the downloaded video?",

@@ -2,13 +2,28 @@
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from models.generate import GenerateRequest, VideoRequest
+from models.generate import GenerateRequest, RerenderRequest, VideoRequest
 from services.script_generator import generate_ad_script, MODEL
 from services.scraper import scrape_business_url
 from services.video_assembler import assemble_video
 import os
 
 router = APIRouter(prefix="/api", tags=["generate"])
+
+
+def _fail(where: str, exc: Exception, message: str) -> HTTPException:
+    """
+    Log the real error, hand the client a sentence it can act on.
+
+    These handlers used to `raise HTTPException(detail=str(e))`, which put
+    ffmpeg stderr, absolute paths and upstream URLs straight into the
+    browser -- the frontend renders `detail` verbatim to the user.
+    """
+    import traceback
+
+    print(f"\u274c {where}: {type(exc).__name__}: {exc}")
+    traceback.print_exc()
+    return HTTPException(status_code=500, detail=message)
 
 
 @router.post("/generate/script")
@@ -41,7 +56,10 @@ async def generate_script(request: GenerateRequest):
             }
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _fail(
+            "Script generation failed", e,
+            "Could not write the ad script. Please try again.",
+        )
 
 
 @router.post("/generate/from-url")
@@ -79,7 +97,10 @@ async def generate_from_url(request: VideoRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _fail(
+            "from-url pipeline failed", e,
+            "Could not build a script from that URL. Please try again.",
+        )
 
 
 @router.post("/generate/video")
@@ -124,24 +145,82 @@ async def generate_video(request: VideoRequest):
             colors=colors,
             logo_url=logo_url,
             duration=duration,
-            website_url=url
+            website_url=url,
+            content_images=scraped.get("images") or [],
         )
 
         return {
             "success": True,
             "data": {
-                "video_url": video_result["url"],
-                "render_id": video_result["render_id"],
-                "script":    script,
-                "scraped":   scraped,
+                "video_url":   video_result["url"],
+                "render_id":   video_result["render_id"],
+                "scene_count": video_result.get("scene_count"),
+                "scene_sources": video_result.get("scene_sources", []),
+                "script":      script,
+                "scraped":     scraped,
             }
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Video pipeline error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _fail(
+            "Video pipeline failed", e,
+            "Could not finish rendering your ad. Please try again.",
+        )
+
+
+@router.post("/generate/rerender")
+async def rerender_video(request: RerenderRequest):
+    """
+    POST /api/generate/rerender
+
+    Re-renders an ad from an edited script. Deliberately skips both the scrape
+    and the LLM: the editor is holding the final copy, so re-deriving it would
+    only risk changing what the user just wrote.
+    """
+    script = request.script.model_dump()
+
+    if not script["headline"].strip():
+        raise HTTPException(status_code=400, detail="headline is required")
+
+    colors = request.colors or {
+        "primary":   "#1a1a2e",
+        "secondary": "#ffffff",
+        "accent":    "#6c63ff",
+    }
+
+    try:
+        print(f"\n🔁 Re-render for: {request.business_name}")
+        result = await assemble_video(
+            script=script,
+            business_name=request.business_name,
+            colors=colors,
+            logo_url=request.logo_url or "",
+            duration=request.duration,
+            website_url=request.url or "",
+            scene_images=request.scene_images or [],
+            content_images=request.content_images or [],
+            end_card=request.end_card.model_dump() if request.end_card else None,
+            scene_count=request.scene_count,
+        )
+        return {
+            "success": True,
+            "data": {
+                "video_url":   result["url"],
+                "render_id":   result["render_id"],
+                "scene_count": result.get("scene_count"),
+                "scene_sources": result.get("scene_sources", []),
+                "has_end_card": result.get("has_end_card", False),
+                "end_card_at": result.get("end_card_at"),
+                "script":      script,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Re-render error: {e}")
+        raise HTTPException(status_code=500, detail="Re-render failed. Please try again.")
 
 
 @router.get("/output/{filename}")

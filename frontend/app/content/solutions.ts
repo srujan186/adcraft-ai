@@ -93,7 +93,7 @@ export const SOLUTIONS: MarketingContent[] = [
     points: [
       { title: "Same-day turnaround", desc: "Generation takes under a minute, so the ad is ready long before the offer expires." },
       { title: "Urgency in the script", desc: "Bold scripts favour short, direct sentences, which suits a deadline-driven message." },
-      { title: "Terms in the banner", desc: "Use the bottom banner for dates, conditions or a promotional code." },
+      { title: "Terms on the end card", desc: "Use the closing card for dates, conditions or a promotional code." },
     ],
     suggested: { style: "Bold", duration: "15 seconds", music: "Upbeat" },
   },

@@ -125,12 +125,47 @@ def is_light_color(color: str) -> bool:
         return False
 
 
-def build_fallback_data(url: str) -> dict:
+def explain_failure(url: str, reason: str) -> str:
+    """A message that matches what actually went wrong.
+
+    This used to claim bot protection no matter the cause, and offered a
+    manual-entry form that does not exist — so a plain DNS or connection
+    failure was reported as blocking, and the suggested fix led nowhere.
     """
-    When ALL scraping methods fail, return sensible defaults.
+    domain = urlparse(url).netloc or url
+    low = (reason or "").lower()
+
+    if any(k in low for k in ("connection_timed_out", "connecttimeout", "timed out", "timeout")):
+        return (
+            f"We couldn't reach {domain} — it didn't respond in time. "
+            "Check the address is right, and try the full URL including www."
+        )
+    if any(k in low for k in ("name_not_resolved", "getaddrinfo", "nodename", "dns")):
+        return (
+            f"{domain} doesn't seem to exist. Check the spelling, "
+            "or paste the full address from your browser."
+        )
+    if "403" in low or "blocked" in low or "429" in low or "rate limited" in low:
+        return (
+            f"{domain} blocked our request. Some sites refuse automated visits — "
+            "try a different page on the same site, such as an about or product page."
+        )
+    if "too little" in low:
+        return (
+            f"{domain} loaded but had almost no readable content. "
+            "If it's a single-page app, try linking a specific page instead of the homepage."
+        )
+    return (
+        f"We couldn't read {domain} automatically. "
+        "Try the full URL from your browser's address bar, or a different page on the site."
+    )
+
+
+def build_fallback_data(url: str, reason: str = "") -> dict:
+    """
+    When every scraping attempt fails, return sensible defaults.
     The app NEVER crashes — always returns something usable.
-    The scrape_failed flag tells the frontend to show
-    a manual input form instead of auto-filled fields.
+    `scrape_failed` tells the caller this is placeholder data.
     """
     domain = urlparse(url).netloc.replace('www.', '')
     name = domain.split('.')[0].title()
@@ -145,15 +180,11 @@ def build_fallback_data(url: str) -> dict:
             "accent":    "#6c63ff"
         },
         "features":      [],
+        "images":        [],
         "domain":        domain,
         "url":           url,
         "scrape_failed": True,
-        "scrape_message": (
-            "We couldn't automatically read this website. "
-            "This happens with sites that have bot protection. "
-            "You can still create an ad by filling in your "
-            "business details below."
-        )
+        "scrape_message": explain_failure(url, reason),
     }
 
 
@@ -687,6 +718,130 @@ def extract_features(soup) -> list:
 # Calls all extractors, returns structured brand data
 # ═══════════════════════════════════════════════════════
 
+
+# ═══════════════════════════════════════════════════════
+# CONTENT IMAGES
+# The photos a site already uses to sell itself are far
+# better ad footage than screenshots of its own layout.
+# ═══════════════════════════════════════════════════════
+
+# Anything whose URL smells like furniture rather than content.
+_IMAGE_NOISE = (
+    "logo", "icon", "favicon", "sprite", "avatar", "badge", "button",
+    "arrow", "chevron", "bullet", "divider", "placeholder", "spacer",
+    "pixel", "tracking", "analytics", "1x1", "blank", "loading",
+    "spinner", "payment", "visa", "mastercard", "paypal", "apple-pay",
+    "flag", "social", "facebook", "twitter", "instagram", "linkedin",
+    "youtube", "tiktok", "whatsapp", "star", "rating",
+)
+
+_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".avif")
+
+
+def _looks_like_content_image(url: str) -> bool:
+    low = url.lower()
+    if low.startswith("data:"):
+        return False
+    if any(n in low for n in _IMAGE_NOISE):
+        return False
+    if ".svg" in low or ".gif" in low:
+        return False
+    # Query strings are common on CDNs, so check the path only.
+    path = low.split("?")[0]
+    return path.endswith(_IMAGE_EXTS) or "image" in low or "/photo" in low
+
+
+def _biggest_from_srcset(srcset: str) -> str:
+    """Pick the widest candidate out of a srcset attribute."""
+    best, best_w = "", -1
+    for part in srcset.split(","):
+        bits = part.strip().split()
+        if not bits:
+            continue
+        url = bits[0]
+        width = -1
+        if len(bits) > 1 and bits[1].endswith("w"):
+            try:
+                width = int(bits[1][:-1])
+            except ValueError:
+                width = -1
+        if width > best_w:
+            best, best_w = url, width
+    return best
+
+
+def extract_content_images(soup, base_url: str, limit: int = 12) -> list:
+    """
+    Collect the page's own photography, best first.
+
+    Ranked: social preview images (hand-picked by the site owner, always
+    representative), then large <img> elements, then anything else plausible.
+    Screenshots of a website make dull footage and often look identical to each
+    other once you scroll; real product and lifestyle shots do not.
+    """
+    found = []   # (priority, url)
+    seen = set()
+
+    def add(url: str, priority: int):
+        if not url:
+            return
+        url = make_absolute(url.strip(), base_url)
+        if not url.startswith(("http://", "https://")):
+            return
+        key = url.split("?")[0]
+        if key in seen or not _looks_like_content_image(url):
+            return
+        seen.add(key)
+        found.append((priority, url))
+
+    # 1. Social preview images — the owner chose these to represent the page.
+    for prop in ("og:image", "og:image:secure_url", "twitter:image", "twitter:image:src"):
+        for tag in soup.find_all("meta", attrs={"property": prop}) + \
+                   soup.find_all("meta", attrs={"name": prop}):
+            add(tag.get("content", ""), 10)
+
+    # 2. <img>, preferring the widest srcset candidate and honouring width hints.
+    for img in soup.find_all("img"):
+        src = _biggest_from_srcset(img.get("srcset", "")) or \
+              img.get("src") or img.get("data-src") or img.get("data-lazy-src") or ""
+        if not src:
+            continue
+
+        priority = 5
+        try:
+            w = int(str(img.get("width", "0")).replace("px", "") or 0)
+            h = int(str(img.get("height", "0")).replace("px", "") or 0)
+            if w and w < 200:      # thumbnails and icons
+                continue
+            if h and h < 150:
+                continue
+            if w >= 800:
+                priority = 8
+            elif w >= 400:
+                priority = 6
+        except ValueError:
+            pass
+
+        add(src, priority)
+
+    # 3. <picture><source srcset>
+    for source in soup.find_all("source"):
+        add(_biggest_from_srcset(source.get("srcset", "")), 4)
+
+    # 4. Inline background-image, which is how a lot of heroes are built.
+    for el in soup.find_all(style=True):
+        style = el.get("style", "")
+        if "background-image" in style:
+            m = re.search(r"url\(['\"]?([^'\")]+)['\"]?\)", style)
+            if m:
+                add(m.group(1), 7)
+
+    found.sort(key=lambda x: -x[0])
+    urls = [u for _, u in found[:limit]]
+    print(f"  🖼️  Found {len(urls)} content image(s)")
+    return urls
+
+
 def parse_html(html: str, url: str) -> dict:
     """
     Takes raw HTML string.
@@ -702,6 +857,7 @@ def parse_html(html: str, url: str) -> dict:
     logo_url      = extract_logo(soup, url)
     colors        = extract_colors(soup, url, html)
     features      = extract_features(soup)
+    images        = extract_content_images(soup, url)
 
     return {
         "business_name": business_name,
@@ -710,6 +866,7 @@ def parse_html(html: str, url: str) -> dict:
         "logo_url":      logo_url,
         "colors":        colors,
         "features":      features,
+        "images":        images,
         "domain":        domain,
         "url":           url,
         "scrape_failed": False
@@ -996,9 +1153,47 @@ def calculate_completeness_score(data: dict) -> int:
 # Everything above feeds into this one function
 # ═══════════════════════════════════════════════════════
 
-async def scrape_business_url(url: str) -> dict:
+# httpx errors that mean "this host is not answering". Playwright cannot do
+# better with any of them, so there is no point spending two 30s page loads to
+# confirm it — the useful next move is the www. host.
+UNREACHABLE_MARKERS = (
+    "getaddrinfo",
+    "nodename nor servname",
+    "name or service not known",
+    "connecttimeout",
+    "connecterror",
+    "connection refused",
+    "connection timed out",
+    "all connection attempts failed",
+    "ssl",
+)
+
+
+def is_unreachable(error: str) -> bool:
+    low = (error or "").lower()
+    return any(m in low for m in UNREACHABLE_MARKERS)
+
+
+def www_variant(url: str) -> str:
+    """`https://nike.in` -> `https://www.nike.in`, or "" if not applicable.
+
+    Plenty of sites only answer on the www host: the apex either has no A
+    record or refuses the connection. Users type the bare domain, so without
+    this a perfectly reachable site looks completely dead.
     """
-    Main entry point for scraping.
+    parsed = urlparse(url)
+    host = parsed.netloc
+    if not host or host.startswith("www.") or host.replace(".", "").isdigit():
+        return ""
+    # Only worth trying for a bare apex: something.tld
+    if host.count(".") != 1:
+        return ""
+    return parsed._replace(netloc=f"www.{host}").geturl()
+
+
+async def _scrape_one(url: str) -> dict:
+    """
+    One host, the two-pass strategy.
 
     Smart two-pass strategy:
     1. Try httpx first (fast — 1-2 seconds)
@@ -1013,11 +1208,12 @@ async def scrape_business_url(url: str) -> dict:
     - Quality of Playwright for complex sites
     - No unnecessary 10-second waits
     """
-    url = clean_url(url)
     print(f"\n🔍 Scraping: {url}")
     print("─" * 50)
 
     httpx_result = None
+    httpx_error = ""
+    playwright_error = ""
 
     # ── PASS 1: Try httpx ─────────────────────────────
     try:
@@ -1038,7 +1234,14 @@ async def scrape_business_url(url: str) -> dict:
             print(f"⚠️  Data incomplete (score: {score}) — upgrading to Playwright")
 
     except Exception as e:
-        print(f"⚠️  httpx failed: {e}")
+        httpx_error = f"{type(e).__name__}: {e}"
+        print(f"⚠️  httpx failed: {httpx_error}")
+
+        if is_unreachable(httpx_error):
+            # Nothing to gain from a browser against a host that will not
+            # answer — raise now so the caller can try the www. variant.
+            raise Exception(httpx_error)
+
         print("🔄 Trying Playwright...")
 
     # ── PASS 2: Try Playwright ────────────────────────
@@ -1062,13 +1265,44 @@ async def scrape_business_url(url: str) -> dict:
             return playwright_result
 
     except Exception as e:
-        print(f"⚠️  Playwright failed: {e}")
+        playwright_error = str(e)
+        print(f"⚠️  Playwright failed: {playwright_error}")
 
     # ── PASS 3: Use whatever httpx got (even if incomplete) ──
     if httpx_result is not None:
         print("📦 Using incomplete httpx result — better than nothing")
         return httpx_result
 
-    # ── PASS 4: Total failure — return fallback ───────
-    print(f"⚠️  Both scrapers failed — using fallback")
-    return build_fallback_data(url)
+    # ── PASS 4: Total failure ─────────────────────────
+    # Carry the underlying cause up: the caller turns it into the message the
+    # user sees, and "ERR_NAME_NOT_RESOLVED" vs "403" lead to different advice.
+    raise Exception(playwright_error or httpx_error or f"Could not reach {url}")
+
+
+async def scrape_business_url(url: str) -> dict:
+    """
+    Main entry point for scraping.
+
+    Tries the URL as given, then the www. host if the apex was unreachable.
+    Only falls back to placeholder data when every candidate fails, so the
+    caller can tell "site is unreadable" from "site needs www".
+    """
+    url = clean_url(url)
+    candidates = [url]
+
+    alt = www_variant(url)
+    if alt:
+        candidates.append(alt)
+
+    last_error = ""
+    for i, candidate in enumerate(candidates):
+        try:
+            return await _scrape_one(candidate)
+        except Exception as e:
+            last_error = str(e)
+            print(f"⚠️  {candidate} failed: {last_error[:120]}")
+            if i + 1 < len(candidates):
+                print(f"🔄 Retrying on {candidates[i + 1]}")
+
+    print("⚠️  Every candidate failed — using fallback")
+    return build_fallback_data(url, last_error)
