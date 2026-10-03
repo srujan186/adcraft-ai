@@ -111,13 +111,16 @@ def build_prompt(
     description   = sanitize_for_prompt(description)
     tagline       = sanitize_for_prompt(tagline, 200)
 
-    # Word count target
-    # Kokoro is synthesized at speed=1.3x (set in tts.py).
-    # At 1.3x, effective rate ≈ 2.6 words/sec.
-    # Target ~40 words for 15s | ~80 words for 30s — fills 4 proper sentences.
-    target_words = int(duration * 2.7)   # ideal centre (40 for 15s, 81 for 30s)
-    min_words    = int(duration * 2.5)   # absolute minimum (37 for 15s)
-    max_words    = int(duration * 3.0)   # hard ceiling (45 for 15s)
+    # Word budget, calibrated to the TTS speed in tts.py (DEFAULT_SPEED = 0.95,
+    # measured at ~2.86 words/sec). The multipliers are words-per-second × the
+    # share of the ad narration should fill: target ~88%, max ~95% (so it lands
+    # just before the hard cut, never mid-sentence), min ~78% (so it does not
+    # trail off into silence). If you change the TTS speed, re-measure and
+    # re-derive these — at the old 1.3x these were 2.7/2.5/3.0 and a 0.95x voice
+    # would overrun them.
+    target_words = int(duration * 2.5)   # ideal centre (37 for 15s, 75 for 30s)
+    min_words    = int(duration * 2.2)   # floor        (33 for 15s, 66 for 30s)
+    max_words    = int(duration * 2.7)   # hard ceiling (40 for 15s, 81 for 30s)
 
     # The arc scales with length. A 15s ad is a tight four-beat punch; a 30s ad
     # has room for a real story, so the old "EXACTLY 4 sentences" rule (which

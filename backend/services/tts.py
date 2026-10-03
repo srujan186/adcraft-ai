@@ -45,10 +45,12 @@ VOICES = {
 # Default voice for ads
 DEFAULT_VOICE = "af_heart"
 
-# Synthesis speed — 1.3x sounds natural and fits ~40 words into 15s.
-# This is Kokoro's native speed param (not post-processing atempo),
-# so pitch stays natural even at higher speeds.
-DEFAULT_SPEED = 1.3
+# Synthesis speed. Kokoro's native speed param (not post-processing atempo),
+# so pitch stays natural. 1.3x delivered ~3.6 words/sec, which read as rushed
+# and still left a music-only tail; 0.95x (~2.86 words/sec) is calm, confident
+# and deliberate. The script word budget in script_generator.py is calibrated
+# to THIS rate — change one without the other and narration over/under-runs.
+DEFAULT_SPEED = 0.95
 
 # SECTION 1 — CORE TTS FUNCTION
 # ═══════════════════════════════════════════════════════
