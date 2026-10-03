@@ -315,6 +315,70 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
         cardDetails.address     !== (renderedCard?.address ?? "") ||
         cardDetails.website     !== (renderedCard?.website ?? "")));
 
+  // ── The timeline's layout, and how it maps to the video ───────────────────
+  //
+  // The timeline describes the render that is *coming*; the <video> plays the
+  // one that is *here*. Keeping two scales caused both of the bugs this
+  // replaced: the end-card clip overlapped the last scene by its own width,
+  // and the playhead sat over a different clip from the frame on screen.
+  //
+  // With nothing pending the two spaces are identical and these are no-ops.
+
+  /** Seconds of footage the next render will have, before any end card. */
+  const projectedFootage = duration
+    ? Math.max(0.1, duration - (hasCardData ? ENDCARD_SECONDS : 0))
+    : 0;
+
+  /** The share of the track the footage occupies. The card takes the rest. */
+  const footagePct = duration ? (projectedFootage / duration) * 100 : 100;
+
+  /** How long one scene of the *rendered* file runs. */
+  const renderedPerScene = renderedScenes ? footageEnd / renderedScenes : 0;
+
+  /** The slot currently showing scene `k` of the rendered file. */
+  function slotOfRendered(k: number): number {
+    const i = slots.findIndex((s) => s.thumbIndex === k);
+    return i >= 0 ? i : Math.min(k, sceneCount - 1);
+  }
+
+  /** Real video time -> where that frame sits on the timeline, in %. */
+  function timeToPct(time: number): number {
+    if (!duration || !renderedPerScene) return 0;
+    if (time >= footageEnd) {
+      // Past the footage: inside the rendered file's own card, if it has one.
+      const tail = Math.max(0.001, duration - footageEnd);
+      const into = Math.min(1, (time - footageEnd) / tail);
+      return footagePct + into * (100 - footagePct);
+    }
+    const k = time / renderedPerScene;
+    const whole = Math.min(renderedScenes - 1, Math.floor(k));
+    return ((slotOfRendered(whole) + (k - whole)) / sceneCount) * footagePct;
+  }
+
+  /** A point on the timeline -> the video time to seek to, or null for none. */
+  function pctToTime(pct: number): number | null {
+    if (!duration || !renderedPerScene) return null;
+    // The card is not footage; there is nothing inside it to scrub through.
+    if (pct >= footagePct) return footageEnd;
+    const pos = (pct / footagePct) * sceneCount;
+    const idx = Math.min(sceneCount - 1, Math.floor(pos));
+    const slot = slots[idx];
+    // A scene no render has produced has no frame to seek to.
+    if (slot?.thumbIndex == null) return null;
+    return (slot.thumbIndex + (pos - idx)) * renderedPerScene;
+  }
+
+  const playheadPct = timeToPct(currentTime);
+  const inCardWindow = duration > 0 && playheadPct >= footagePct - 0.01;
+
+  /** The scene under the playhead, or -1 while the end card is showing. */
+  const activeScene = inCardWindow
+    ? -1
+    : Math.min(
+        sceneCount - 1,
+        Math.max(0, Math.floor((playheadPct / footagePct) * sceneCount))
+      );
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function set<K extends keyof Edits>(key: K, value: Edits[K]) {
@@ -435,23 +499,6 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
     // cut, even when no new picture was chosen.
     slotsDirty;
 
-  // -1 while the end card is on screen: no scene is showing then, so the
-  // Scenes panel should not claim one is.
-  const playingSceneOfRender =
-    !duration ? 0
-    : currentTime >= footageEnd ? -1
-    : Math.min(
-        renderedScenes - 1,
-        Math.floor((currentTime / footageEnd) * renderedScenes)
-      );
-
-  // Which *slot* that corresponds to. After a delete the two no longer line
-  // up, so the highlight follows the slot that owns the frame on screen.
-  const activeScene =
-    playingSceneOfRender < 0
-      ? -1
-      : slots.findIndex((s) => s.thumbIndex === playingSceneOfRender);
-
   async function handleSaveExport() {
     sessionStorage.setItem("adcraft_edits", JSON.stringify(edits));
     setRenderError("");
@@ -553,8 +600,13 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
     if (!el || !v || !duration) return;
     const rect = el.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    v.currentTime = ratio * duration;
-    setCurrentTime(ratio * duration);
+    // Through the layout, not straight to `ratio * duration`: where you click
+    // is a position in the *coming* render, which is not the same instant in
+    // the file on screen whenever a card or a scene is pending.
+    const at = pctToTime(ratio * 100);
+    if (at == null) return;
+    v.currentTime = at;
+    setCurrentTime(at);
   }
 
   /** Jump the preview to the start of a scene. */
@@ -889,14 +941,6 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
       );
     }
   }
-
-  // Where the card takes over, mirroring the renderer.
-  const cardStart = duration ? Math.max(0, duration - ENDCARD_SECONDS) : 0;
-
-  // How much of the timeline's width the footage occupies. The scene clips are
-  // laid out inside this, so they stop where the end card starts.
-  const footagePct = duration ? (footageEnd / duration) * 100 : 100;
-  const inCardWindow = duration > 0 && currentTime >= cardStart;
 
   // Show the card over the player while you are building it, and whenever the
   // playhead is in its window but the rendered file does not match yet.
@@ -1250,20 +1294,18 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                         placeholder for something that never rendered. */}
                     <div
                       className="ve-clip ve-clip-endcard"
-                      style={
-                        duration
-                          ? {
-                              left:  `${(cardStart / duration) * 100}%`,
-                              width: `${(ENDCARD_SECONDS / duration) * 100}%`,
-                            }
-                          : { left: "80%", width: "20%" }
-                      }
+                      /* Begins where the last scene clip ends, by
+                         construction, so it can never sit on top of one. */
+                      style={{
+                        left:  `${footagePct}%`,
+                        width: `${100 - footagePct}%`,
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setActiveTab("endcard");
                         if (duration) {
                           const v = videoRef.current;
-                          if (v) { v.currentTime = cardStart; setCurrentTime(cardStart); }
+                          if (v) { v.currentTime = footageEnd; setCurrentTime(footageEnd); }
                         }
                       }}
                       role="presentation"
@@ -1276,7 +1318,7 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
                 {duration > 0 && (
                   <div
                     className="ve-playhead"
-                    style={{ left: `${(currentTime / duration) * 100}%` }}
+                    style={{ left: `${playheadPct}%` }}
                     aria-hidden="true"
                   >
                     <span className="ve-playhead-grip" />

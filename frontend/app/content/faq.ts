@@ -38,7 +38,7 @@ export const FAQ: FaqItem[] = [
   },
   {
     q: "Do my edits change the downloaded video?",
-    a: "Yes. “Save & re-render” rebuilds the MP4 with your headline, subtext, call to action, voiceover script, music bed, brand colours and any scene images you swapped in. It takes about half a minute — narration is synthesised again and the video is re-encoded — and Download then gives you the new file. Scenes you did not replace are re-captured from your site, so the ad stays current.",
+    a: "Yes. “Save & re-render” rebuilds the MP4 with your headline, subtext, call to action, voiceover script, music bed, brand colours, end card, and the scenes you added, removed or swapped. It takes about half a minute — narration is synthesised again and the video is re-encoded — and Download then gives you the new file. Scenes you did not touch keep the same image they had.",
   },
   {
     q: "What if it cannot read my site?",

@@ -209,6 +209,106 @@ changed and why, since some of the fixes are load-bearing:
     users saw ffmpeg stderr and absolute Windows paths. `_fail()` logs the
     traceback and returns a sentence instead.
 
+### Page images are vetted before they become scenes
+
+A scrape returns the page's own images ranked by HTML signals only. On a real
+site that mixes award badges, compliance marks ("ISO 27001", "SOC 2"), logo
+walls and icon strips in with the actual product shots — and those made
+meaningless footage. lamatic.ai's ad opened on a "Product of the day" badge and
+an NVIDIA-program mark floating in black.
+
+Two fixes in `resolve_scene_images`:
+
+- **`_flatten_for_render`** composites transparency over near-white, not the
+  `convert("RGB")` black default. These are light-themed sites; a transparent
+  UI export on black reads as a fragment in a void.
+- **`_vet_scene_image`** rejects an image that is too small (an icon/badge),
+  has an extreme aspect ratio (a banner or logo strip), is mostly transparent
+  (a logo), or is near-flat (a solid block). Pixel-level, because the junk here
+  has opaque hashed filenames — a URL filter cannot see it. Stats run on a
+  48×48 downsample so a 3000px banner is not measured pixel-by-pixel in Python.
+
+Vetting is **opt-in** via `vet=True`, passed only on the two page-image gather
+calls. Editor uploads (line ~1348) and website screenshots are real captures
+the user chose or we took deliberately — never vetted. If vetting leaves fewer
+than `TARGET_SCENES`, the screenshot top-up fills the rest exactly as before.
+
+Verified on lamatic.ai: 12 found → 8 kept (hero, product UI, two headshots,
+four dashboards), 4 rejected (two badges too small, two strips at ~4:1), and the
+rendered scenes sit on white instead of in black.
+
+### Scenes are chosen by relevance + coherence, not scrape order
+
+Vetting removes junk, but the *survivors* still need ranking: on lamatic the
+eight kept images were hero → UI → **two founder headshots** → four dashboards,
+and taking the first six in scrape order put the faces in the ad. A SaaS ad
+should show the product (its UI), not its founders.
+
+`select_scenes(candidates, intent, wanted)` picks the set:
+
+- **`classify_scene_image`** (numpy + Pillow, no new deps) tags each image on a
+  64×64 downsample: `is_face` (skin-tone fraction in the centre third — enough
+  to down-rank an obvious headshot without a face-detection library), `tone`
+  (light/dark/mid), `ui_ness` (fraction of flat 8×8 blocks — panels/backgrounds
+  vs a busy photo), and `detail`.
+- **`detect_site_intent`** (scraper) reads the rendered HTML for cues and
+  returns `saas` / `commerce` / `unknown`. Raw-shell keywords are noisy for
+  SPAs, but the Playwright-rendered DOM used here is not — lamatic scores `saas`
+  (free-trial / book-a-demo / dashboard), nike scores `commerce`.
+- **Scoring** starts from the owner's own rank (og:image/hero first), then
+  **down-ranks faces** (hard for saas/commerce, softer otherwise — never
+  dropped, so a people-focused site still gets footage), nudges toward UI for
+  saas and photos for commerce, and penalises near-empty frames. Then it
+  **anchors on the best non-face image's tone and rewards matches**, so the ad
+  does not lurch between a white UI and a dark office portrait.
+
+`select_scenes` now **ranks and flags** every candidate (`(path, src, is_face)`,
+best first) rather than truncating — the caller decides how many to use and how
+to fill a shortfall (see scene count below). `site_intent` threads route →
+`assemble_video` → `_assemble_render`; absent (e.g. a rerender) it defaults
+`unknown`, which still applies coherence.
+
+### Scene count scales with ad length
+
+`scenes_for_duration(duration)` — ~one shot per 3s, floored at `TARGET_SCENES`
+(6) and capped at `MAX_SCENES` (12): 15s → 6 (2.5s each), 30s → 10 (3.0s each).
+A 30s ad was six images held 5s each, which dragged. `duration` also sizes the
+candidate pool (`target_scenes * 2`) and the screenshot top-up.
+
+**The fill rule is the subtle part.** A 30s ad wants 10 scenes, but an
+image-light site may have only ~6 good ones. Forcing 10 by padding with the
+down-ranked faces *and* blind screenshots reintroduced exactly the scrappiness
+the selection removes — a real 30s lamatic render pulled back the two founder
+headshots **and** a screenshot of the footer with a cookie-consent banner. So
+the content branch fills by priority:
+
+1. Good (non-face) content images, distinct.
+2. If short but ≥3 good exist, **reuse** the good shots to reach the count
+   (repeats land ~`len(good)` apart, never adjacent) — better than a founder
+   shown twice or a cookie-banner capture.
+3. Only when good footage is genuinely scarce (<3) does it fall back to faces,
+   then the screenshot top-up.
+
+Because reuse puts the same source PNG in more than one scene,
+`screenshots_to_video` names clips `_clip{i}` by position, not by source, or the
+repeats would overwrite each other.
+
+Verified: lamatic 30s → 10 scenes, 6 distinct good + 4 reused, **no faces, no
+screenshots**, 30.0s exactly; nike 30s → 9 distinct + 1 reused, intent
+`commerce`, no faces. Face down-rank is still **not a hard drop** — unit-tested
+2 non-face + 4 face → 6 returned, UIs first. Remaining polish (deferred): a
+per-scene Ken Burns zoom would make reused shots read as distinct.
+
+### Script scales with ad length
+
+`build_prompt` branches on duration. 15s keeps its tight **4-sentence** arc
+(hook, context, benefit, CTA). 30s was *also* capped at 4 sentences, so it came
+out as a 15s script bloated with commas; it now asks for a **7–8 sentence** arc
+(hook, stakes, introduce, how-it-works, benefit, differentiator, reassure, CTA).
+The differentiator beat explicitly forbids invented statistics, awards, review
+scores or customer names — content-honesty holds. Verified: 15s → 39 words /
+4 sentences; 30s → 78 words / 8 sentences.
+
 ### Scene sources
 
 Each render reports `scene_sources`: one entry per scene naming the URL it was

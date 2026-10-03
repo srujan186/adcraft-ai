@@ -1,0 +1,37 @@
+# Build context for the root Dockerfile (the Hugging Face Space image).
+#
+# That Dockerfile only copies backend/, but Docker still uploads the entire
+# context first — and .gitignore does not apply to Docker. Without this file a
+# local build shipped backend/.env (API keys) and backend/venv/ into the image,
+# and sent the whole frontend, node_modules included, as build context.
+#
+# Must NOT exclude backend/models/ or backend/music/: those are the Kokoro
+# weights and the music beds the render needs at runtime.
+
+# Secrets and local environments
+**/.env
+**/.env.*
+**/venv/
+**/__pycache__/
+**/*.pyc
+
+# Not used by the backend image at all
+frontend/
+.git/
+.claude/
+.agents/
+skills-lock.json
+
+# Render output and scratch — created fresh inside the container
+backend/output/
+backend/temp/
+
+# Dev-only files
+backend/test_tts.py
+backend/test_voice.wav
+**/*.md
+*.log
+push_error.txt
+random.txt
+generator/
+**/.DS_Store

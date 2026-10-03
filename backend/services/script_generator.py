@@ -119,6 +119,55 @@ def build_prompt(
     min_words    = int(duration * 2.5)   # absolute minimum (37 for 15s)
     max_words    = int(duration * 3.0)   # hard ceiling (45 for 15s)
 
+    # The arc scales with length. A 15s ad is a tight four-beat punch; a 30s ad
+    # has room for a real story, so the old "EXACTLY 4 sentences" rule (which
+    # capped a 30s script at 15s length, just crammed with commas) gives way to
+    # a fuller structure with distinct beats that can carry more scenes.
+    if duration <= 15:
+        structure_block = (
+            "STRUCTURE — write EXACTLY 4 complete sentences (not fragments):\n"
+            "1. HOOK sentence (8-10 words) — open with a relatable problem or bold claim\n"
+            f"2. CONTEXT sentence (10-12 words) — explain what {business_name} does and who it's for\n"
+            "3. BENEFIT sentence (10-12 words) — the key result, outcome, or unique advantage it delivers\n"
+            "4. LAND sentence (6-8 words) — brand name + strong call to action"
+        )
+        example_block = (
+            f'✅ TARGET (~40 words, 4 sentences):\n'
+            f'"Running a business is hard enough. {business_name} gives you the tools, '
+            f'the insights, and the support to grow — without the guesswork. Built for '
+            f'teams that refuse to settle. Start your free trial today."\n\n'
+            f'✅ ANOTHER EXAMPLE (~38 words):\n'
+            f'"Your customers expect more. {business_name} helps you deliver faster '
+            f'service, smarter workflows, and a better experience — every single time. '
+            f'Made for people who care about the details. Join us and see the difference."'
+        )
+        brand_rule = "- Mention the brand name exactly once, in sentence 4."
+    else:
+        structure_block = (
+            "STRUCTURE — write 7-8 complete sentences (not fragments): a full "
+            f"{duration}-second arc, each sentence a distinct beat.\n"
+            "1. HOOK (8-10 words) — a relatable problem or a bold claim\n"
+            "2. STAKES (10-13 words) — why that problem costs time, money, or momentum\n"
+            f"3. INTRODUCE (10-13 words) — what {business_name} is and who it's for\n"
+            "4. HOW IT WORKS (10-13 words) — the key mechanism, or how it delivers\n"
+            "5. BENEFIT (10-13 words) — the concrete result or outcome it produces\n"
+            "6. WHAT SETS IT APART (8-12 words) — a REAL differentiator drawn from the "
+            "description. Never invent a statistic, an award, a review score, or a customer name.\n"
+            "7. REASSURE (8-11 words) — remove the last objection: ease, speed, or low risk\n"
+            "8. LAND (6-8 words) — brand name + a strong call to action\n"
+            "(Beats 7 and 8 may merge if you have already reached the word target.)"
+        )
+        example_block = (
+            f'✅ TARGET (~80 words, 7-8 sentences):\n'
+            f'"Scaling a business shouldn\'t mean drowning in complexity. Every week, teams '
+            f'lose hours to tools that don\'t talk to each other and work that breaks under '
+            f'pressure. {business_name} brings it all into one place, built for the people '
+            f'who actually do the work. Set it up in minutes, not months. Watch tasks that '
+            f'used to take days finish before lunch. No steep learning curve, no hidden costs. '
+            f'Get started with {business_name} today."'
+        )
+        brand_rule = "- Mention the brand name once or twice: in the INTRODUCE beat and the final CTA."
+
     prompt = f"""You are a senior creative director at a world-class ad agency.
 You have written campaigns for Apple, Nike, Airbnb, and Coca-Cola.
 Your voiceovers sound like REAL TV and YouTube ads — never robotic, never generic.
@@ -144,25 +193,17 @@ The voiceover MUST be between {min_words} and {max_words} words. Ideal: {target_
 - Do NOT write more than {max_words} words or the audio will be cut off mid-sentence.
 - Every word must earn its place. No padding. No filler.
 
-STRUCTURE — write EXACTLY 4 complete sentences (not fragments):
-1. HOOK sentence (8-10 words) — open with a relatable problem or bold claim
-2. CONTEXT sentence (10-12 words) — explain what {business_name} does and who it's for
-3. BENEFIT sentence (10-12 words) — the key result, outcome, or unique advantage it delivers
-4. LAND sentence (6-8 words) — brand name + strong call to action
+{structure_block}
 
 HOW REAL ADS SOUND — match this quality:
-✅ TARGET (~40 words, 4 sentences):
-"Running a business is hard enough. {business_name} gives you the tools, the insights, and the support to grow — without the guesswork. Thousands of businesses already trust us to get it done. Start your free trial today."
-
-✅ ANOTHER EXAMPLE (~38 words):
-"Your customers expect more. {business_name} helps you deliver faster service, smarter workflows, and a better experience — every single time. Built for teams that refuse to settle. Join us and see the difference."
+{example_block}
 
 ❌ BAD (fragments, too short, no real info):
 "You fast but motion go faster. Try it free now!" — This is NOT acceptable.
 
 - Each sentence must be a complete thought, not a one-word fragment.
 - Include real detail about what the brand does, not generic puffery.
-- Mention the brand name exactly once, in sentence 4.
+{brand_rule}
 - No filler: "In today's world", "Look no further", "A wide range of solutions"
 
 ━━━ OTHER FIELDS ━━━

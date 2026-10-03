@@ -1,0 +1,25 @@
+# Build context for backend/Dockerfile (docker-compose), which runs `COPY . .`.
+#
+# .gitignore does not apply to Docker, so without this the image received
+# .env (API keys), the local venv/, and every render in output/ and temp/.
+#
+# Unlike .gitignore, a pattern here with no slash matches ONLY at the context
+# root — `__pycache__/` would miss services/__pycache__/. Anything that can sit
+# in a subdirectory needs `**/`.
+#
+# Must NOT exclude models/ or music/: the Kokoro weights and music beds are
+# needed at runtime.
+
+.env
+.env.*
+venv/
+**/__pycache__/
+**/*.pyc
+
+output/
+temp/
+
+test_tts.py
+test_voice.wav
+**/*.md
+**/.DS_Store

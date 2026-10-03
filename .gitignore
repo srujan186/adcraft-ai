@@ -1,6 +1,19 @@
-# Claude Code's skill-discovery path. These entries are symlinks into
-# .agents/skills/ (the canonical install location recorded in skills-lock.json),
-# not real files — tracking them committed a second copy of every SKILL.md.
-# Keep .agents/skills/ as the single source; recreate these links with the
-# skills installer after a fresh clone.
-/.claude/skills/
+# ── Not part of the product ──────────────────────────────────────────────────
+# Nothing below is read by the app, its build, or its deploy. It used to be
+# tracked and pushed with everything else.
+
+# AI-agent tooling: skills, their installer lockfile, and local agent settings.
+# Dev-machine tooling, not something the app ships or runs — install them
+# locally with the skills installer.
+/.claude/
+/.agents/
+/skills-lock.json
+
+# Local scratch and logs.
+*.log
+push_error.txt
+random.txt
+/generator/
+
+# Written by backend/test_tts.py every time it runs.
+backend/test_voice.wav

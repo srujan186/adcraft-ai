@@ -1,0 +1,20 @@
+# Build context for frontend/Dockerfile.
+#
+# That Dockerfile runs `npm ci` and then `COPY . .`. Without this file the host's
+# node_modules was copied over the one npm ci had just installed — and on a
+# Windows machine those are win32 native binaries (SWC, lightningcss) inside a
+# Linux image. .env.local would also have been baked into the build.
+
+node_modules
+.next
+out
+build
+coverage
+
+.env
+.env.*
+
+*.md
+*.tsbuildinfo
+npm-debug.log*
+.DS_Store

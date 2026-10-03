@@ -181,6 +181,7 @@ def build_fallback_data(url: str, reason: str = "") -> dict:
         },
         "features":      [],
         "images":        [],
+        "site_intent":   "unknown",
         "domain":        domain,
         "url":           url,
         "scrape_failed": True,
@@ -842,6 +843,39 @@ def extract_content_images(soup, base_url: str, limit: int = 12) -> list:
     return urls
 
 
+# Keyword cues per intent. Matched against the rendered page text, lowercased.
+_SAAS_CUES = (
+    "free trial", "start free", "start for free", "book a demo", "request a demo",
+    "get a demo", "sign up free", "pricing", "per month", "/mo", "dashboard",
+    "workflow", "integrations", "api key", "documentation", "open source",
+    "deploy", "sdk", "webhook",
+)
+_COMMERCE_CUES = (
+    "add to cart", "add to bag", "shopping cart", "checkout", "free shipping",
+    "in stock", "out of stock", "add to basket", "shop now", "buy now",
+    "product details", "size guide", "add to wishlist", "order now",
+)
+
+
+def detect_site_intent(html: str) -> str:
+    """
+    "saas", "commerce", or "unknown".
+
+    Used to bias scene selection: a dev-tool's product is its UI, a store's is
+    its products. "unknown" is a safe default -- selection then just prefers
+    photographic, visually consistent footage, which suits most sites.
+    """
+    t = (html or "").lower()
+    saas     = sum(1 for c in _SAAS_CUES if c in t)
+    commerce = sum(1 for c in _COMMERCE_CUES if c in t)
+
+    if saas >= 3 and saas > commerce:
+        return "saas"
+    if commerce >= 2 and commerce >= saas:
+        return "commerce"
+    return "unknown"
+
+
 def parse_html(html: str, url: str) -> dict:
     """
     Takes raw HTML string.
@@ -858,6 +892,8 @@ def parse_html(html: str, url: str) -> dict:
     colors        = extract_colors(soup, url, html)
     features      = extract_features(soup)
     images        = extract_content_images(soup, url)
+    site_intent   = detect_site_intent(html)
+    print(f"  🧭 Site intent: {site_intent}")
 
     return {
         "business_name": business_name,
@@ -867,6 +903,7 @@ def parse_html(html: str, url: str) -> dict:
         "colors":        colors,
         "features":      features,
         "images":        images,
+        "site_intent":   site_intent,
         "domain":        domain,
         "url":           url,
         "scrape_failed": False

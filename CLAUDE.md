@@ -196,6 +196,24 @@ Still open, none of them blocking:
    (non-LFS) binaries. The current tip is fine — history is not. Fixing needs
    `git filter-repo`/BFG or a fresh history. **Destructive — ask us first.**
 
+**What ships, and what does not.** Agent tooling and scratch are untracked
+and ignored at the root: `.claude/`, `.agents/`, `skills-lock.json`, `*.log`,
+`push_error.txt`, `random.txt`, `generator/`, `backend/test_voice.wav`. None of
+it is read by the app, its build or its deploy. Install skills locally rather
+than committing them.
+
+`.gitignore` does not apply to Docker, so each build context has its own
+`.dockerignore` (root for the HF Space image, `backend/` and `frontend/` for
+compose). Before these existed, a local build baked `backend/.env` and `venv/`
+into the backend image and copied host `node_modules` over the frontend's fresh
+`npm ci`. **Two rules if you edit them:**
+
+- A `.dockerignore` pattern with no `/` matches **only at the context root** —
+  it is not floating like `.gitignore`. `__pycache__/` misses
+  `services/__pycache__/`; write `**/__pycache__/`.
+- Never exclude `backend/models/` or `backend/music/`. The Kokoro weights and
+  music beds are runtime assets, and the render goes silent without them.
+
 **The media files are git-lfs.** `models/*.onnx`, `models/*.bin` and
 `music/*.mp3` were sitting as 130-byte pointers, so Kokoro could not load and
 every ad rendered silent while still reporting success. `git lfs pull` fixes a

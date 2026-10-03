@@ -260,6 +260,33 @@ scroller, aligned with the video lane. The track is a picture of the ad's
 duration; an action button is not part of that. `MAX_SCENES` (12) mirrors the
 backend's cap, and the button disables there.
 
+**One layout, two time bases — do not reintroduce a second one.** The timeline
+describes the render that is *coming*; the `<video>` plays the one that is
+*here*. Those differ the moment anything is pending, and keeping two scales
+caused two visible bugs at once: type a phone number into an ad with no card
+and the end-card clip appeared at 80-100% while the scene clips still ran to
+100% (a 20% overlap), and the playhead sat over a different clip from the frame
+on screen — clicking scene 6 showed the end card.
+
+Everything is now expressed in the projected layout, and two functions convert:
+
+- `footagePct` — the share of the track the footage takes, from
+  `duration - (hasCardData ? ENDCARD_SECONDS : 0)`. Driven by the **pending**
+  card, not `result.has_end_card`. The end-card clip is `left: footagePct%`,
+  `width: 100 - footagePct`, so it starts exactly where the last scene stops
+  and cannot overlap it by construction.
+- `timeToPct(t)` — video time to a position on the track. Used by the playhead
+  and by `activeScene`, so the highlighted clip, the Scenes panel and the live
+  preview always show the frame that is actually on screen.
+- `pctToTime(pct)` — the inverse, used by `scrubTo`. Returns `null` for a slot
+  no render has produced, so clicking a pending scene seeks nowhere rather than
+  somewhere wrong.
+
+Both route through `slot.thumbIndex`, so they stay correct after a scene is
+deleted or added. **With nothing pending the two spaces are identical** —
+verified: clicking 8.3% lands the playhead at 8.3% — so this costs the common
+case nothing.
+
 **The timeline zooms.** `.ve-tl-scroll` is a horizontal scroller holding
 `.ve-tl-track`, whose width is `zoom * 100%`. Only the track scales, so clip
 positions stay in `%` of real time and remain accurate at any magnification —

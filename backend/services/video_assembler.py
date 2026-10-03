@@ -28,7 +28,27 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # How many distinct shots an ad is cut from. Three meant a short site gave
 # three near-identical screenshots — the ad looked like one static image.
+# This is the 15s default; longer ads get more via scenes_for_duration so a
+# 30s ad is not six images held 5s each.
 TARGET_SCENES = 6
+
+
+def scenes_for_duration(duration: int) -> int:
+    """
+    How many scenes to cut an ad of this length into.
+
+    Roughly one shot per 3 seconds — a 15s ad stays at its established 6 (2.5s
+    each), a 30s ad gets 10 (~3s each) so it feels like an ad and not a
+    slideshow. Capped at MAX_SCENES; the model rejects more than that anyway.
+    """
+    if duration <= 15:
+        return TARGET_SCENES
+    return max(TARGET_SCENES, min(MAX_SCENES, round(duration / 3)))
+
+
+# The editor and the request model share this ceiling; past it each shot is too
+# brief to register.
+MAX_SCENES = 12
 
 # ── Caption layout ───────────────────────────────────────────────────────────
 # A lower-third, not a full-screen takeover. The old layout put a 64px headline
@@ -741,7 +761,10 @@ def screenshots_to_video(
 
     clip_paths = []
     for i, screenshot_path in enumerate(screenshot_paths):
-        clip_path = screenshot_path.replace('.png', '_clip.mp4')
+        # Index in the name, not just the source: a long ad reuses a good shot
+        # in more than one scene, and a source-derived name would make those
+        # clips overwrite each other.
+        clip_path = screenshot_path.replace('.png', f'_clip{i}.mp4')
         clip_paths.append(clip_path)
 
         command = [
@@ -1051,13 +1074,170 @@ def assemble_with_ffmpeg(
 MAX_SCENE_BYTES = 8 * 1024 * 1024
 
 
-async def resolve_scene_images(sources: list, render_id: str) -> list:
+def classify_scene_image(path: str) -> dict:
+    """Describe one candidate image: {is_face, tone, ui_ness, detail}.
+
+    Cheap, on a 64x64 downsample. Nothing here needs to be exact -- it feeds a
+    ranking, not a hard gate, and the worst outcome of a misread is a scene in
+    a slightly less ideal order.
+    """
+    import numpy as np
+
+    try:
+        with Image.open(path) as im:
+            small = im.convert("RGB").resize((64, 64), Image.BILINEAR)
+    except Exception:
+        return {"is_face": False, "tone": "mid", "ui_ness": 0.0, "detail": 0.0}
+
+    a = np.asarray(small, dtype=np.float32)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+
+    # Skin in the centre -> a portrait. YCbCr skin range, weighted to the middle
+    # third where a head sits; a tan UI background in the corners does not count.
+    y  = lum
+    cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b
+    cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b
+    skin = (y > 40) & (cb > 77) & (cb < 127) & (cr > 133) & (cr < 173)
+    cx = slice(18, 46)
+    centre_skin = float(skin[cx, cx].mean())
+    is_face = centre_skin > 0.30
+
+    # UI-ness: large flat areas (panels, backgrounds) in 8x8 blocks. A photo is
+    # busy everywhere; an app screenshot has big uniform regions.
+    flat = 0
+    for by in range(8):
+        for bx in range(8):
+            blk = lum[by * 8:(by + 1) * 8, bx * 8:(bx + 1) * 8]
+            if blk.std() < 8:
+                flat += 1
+    ui_ness = flat / 64.0
+
+    mean_lum = float(lum.mean())
+    tone = "light" if mean_lum > 150 else "dark" if mean_lum < 95 else "mid"
+    detail = float(lum.std())
+
+    return {"is_face": is_face, "tone": tone, "ui_ness": ui_ness, "detail": detail}
+
+
+def select_scenes(candidates: list, intent: str, wanted: int) -> list:
+    """Pick and order the best `wanted` of the resolved page images.
+
+    `candidates` is [(path, src, rank)] where rank is the scrape's own priority
+    position (0 = the owner's og:image/hero). Returns the chosen subset as
+    [(path, src)], best-opening-scene first.
+    """
+    if not candidates:
+        return []
+
+    scored = []
+    for path, src, rank in candidates:
+        f = classify_scene_image(path)
+        # Start from the owner's own ranking: earlier is better.
+        score = -float(rank)
+
+        # Faces are down-ranked, harder for a product/dev-tool ad than for a
+        # site that might legitimately be about people. Never dropped outright
+        # -- a low score just means "only if nothing better fills the slot".
+        if f["is_face"]:
+            score -= 40 if intent in ("saas", "commerce") else 22
+
+        # Intent nudges: a dev-tool's product is its UI; a store's is its goods.
+        if intent == "saas" and f["ui_ness"] > 0.40:
+            score += 10
+        if intent == "commerce" and not f["is_face"] and f["ui_ness"] < 0.35:
+            score += 8  # a real photograph, not a screenshot
+
+        # A near-empty frame (almost all one flat tone) is dull footage.
+        if f["detail"] < 10:
+            score -= 8
+
+        scored.append({"path": path, "src": src, "rank": rank, "score": score, **f})
+
+    scored.sort(key=lambda s: -s["score"])
+
+    # Coherence: anchor on the best non-face image's tone and prefer matches, so
+    # the ad does not lurch between a white UI and a dark office portrait.
+    anchor = next((s for s in scored if not s["is_face"] and s["tone"] != "mid"), scored[0])
+    target = anchor["tone"]
+    for s in scored:
+        if s["tone"] == target:
+            s["score"] += 6
+    scored.sort(key=lambda s: -s["score"])
+
+    # Return every candidate, ranked, flagged face/not. The caller decides how
+    # many to use and how to fill a shortfall — reusing good footage beats
+    # padding a long ad with faces or footer screenshots.
+    print(
+        f"  🎯 Ranked {len(scored)} page image(s) for intent '{intent}', "
+        f"tone '{target}' ({sum(1 for s in scored if not s['is_face'])} non-face)"
+    )
+    return [(s["path"], s["src"], s["is_face"]) for s in scored]
+
+
+def _flatten_for_render(im: "Image.Image") -> "Image.Image":
+    """RGBA/paletted -> RGB over a near-white ground.
+
+    convert("RGB") composites transparency over black, which left the
+    transparent UI exports and badges on light-themed sites floating in a void.
+    These pages are light, so near-white is what they were designed against.
+    """
+    if im.mode in ("RGBA", "LA", "P"):
+        im = im.convert("RGBA")
+        bg = Image.new("RGB", im.size, (245, 246, 248))
+        bg.paste(im, mask=im.split()[-1])
+        return bg
+    return im.convert("RGB")
+
+
+def _vet_scene_image(im: "Image.Image") -> str:
+    """Why this PAGE image makes poor footage, or "" if it is fine.
+
+    A scrape pulls in award badges, compliance marks, logo walls and icon
+    strips next to real photography. On a 16:9 frame those read as meaningless
+    fragments. Only page images pass through here; uploads and screenshots do
+    not.
+    """
+    w, h = im.size
+    if min(w, h) < 200:
+        return f"too small ({w}x{h}) -- an icon or badge"
+
+    ar = w / h if h else 0
+    if ar > 2.6 or ar < 0.42:
+        return f"aspect {ar:.1f}:1 -- a banner or logo strip"
+
+    # Downsample before measuring: per-pixel stats over a 3000px banner would
+    # be hundreds of thousands of Python iterations.
+    small = im.convert("RGBA").resize((48, 48), Image.BILINEAR)
+    px = list(small.getdata())
+    transparent = sum(1 for q in px if q[3] < 24) / len(px)
+    if transparent > 0.55:
+        return f"{transparent*100:.0f}% transparent -- a logo or badge"
+
+    opaque = [(r, g, b) for r, g, b, a in px if a > 24]
+    if opaque:
+        lum = [0.299 * r + 0.587 * g + 0.114 * b for r, g, b in opaque]
+        m = sum(lum) / len(lum)
+        sd = (sum((x - m) ** 2 for x in lum) / len(lum)) ** 0.5
+        if sd < 8:
+            return f"near-flat (sd {sd:.0f}) -- a solid colour block"
+
+    return ""
+
+
+async def resolve_scene_images(
+    sources: list, render_id: str, vet: bool = False
+) -> list:
     """Turn scene image sources into local file paths, position-preserving.
 
     Returns a list the same length as `sources`, holding a path or None. Keeping
     the positions matters: the editor sends one entry per scene and only some of
     them are user replacements, so collapsing the gaps would shift every scene
     after the first swap. A source that fails costs that scene, not the render.
+
+    `vet=True` additionally drops images that make poor footage (badges, logo
+    strips, flat colour blocks). Pass it for PAGE images only -- never for
+    editor uploads, which the user chose on purpose.
     """
     import base64
     import binascii
@@ -1107,9 +1287,20 @@ async def resolve_scene_images(sources: list, render_id: str) -> list:
                 continue
 
             # Normalise through Pillow: proves it decodes, and hands ffmpeg a
-            # format it definitely understands.
+            # format it understands. Flatten over white, not convert("RGB")'s
+            # black default, so transparent exports are readable not voids.
             with Image.open(out) as im:
-                im.convert("RGB").save(out, "PNG")
+                im.load()
+                if vet:
+                    reason = _vet_scene_image(im)
+                    if reason:
+                        print(f"  ⏭️  Scene image skipped: {reason}")
+                        try:
+                            os.remove(out)
+                        except OSError:
+                            pass
+                        continue
+                _flatten_for_render(im).save(out, "PNG")
 
             # Assign by index, not append: the list is pre-sized to one slot
             # per scene so a partial swap keeps its positions.
@@ -1160,6 +1351,7 @@ async def assemble_video(
     content_images: list | None = None,
     end_card:      dict | None = None,
     scene_count:   int | None = None,
+    site_intent:   str = "unknown",
 ) -> dict:
     """
     Render an ad. See _assemble_render for the pipeline itself.
@@ -1182,6 +1374,7 @@ async def assemble_video(
             content_images=content_images,
             end_card=end_card,
             scene_count=scene_count,
+            site_intent=site_intent,
         )
     finally:
         swept = _sweep_temp(render_id)
@@ -1201,6 +1394,7 @@ async def _assemble_render(
     content_images: list | None = None,
     end_card:      dict | None = None,
     scene_count:   int | None = None,
+    site_intent:   str = "unknown",
 ) -> dict:
     """
     Main entry point for video assembly.
@@ -1265,6 +1459,12 @@ async def _assemble_render(
     # cannot ask for again by name.
     scene_sources: list = []
 
+    # How many scenes this ad is cut into — scales with its length, so a 30s ad
+    # is not the same six shots a 15s ad has, each held twice as long.
+    target_scenes = scenes_for_duration(duration)
+    if target_scenes != TARGET_SCENES:
+        print(f"  🎬 {duration}s ad → {target_scenes} scenes")
+
     # A card with nothing on it is not a card. Only a real value counts, so an
     # untouched Banner panel does not cost the ad three seconds of footage.
     wants_endcard = bool(end_card) and any(
@@ -1305,8 +1505,8 @@ async def _assemble_render(
             filler, filler_src = [], []
             if content_images:
                 print(f"  🖼️  Filling un-replaced scenes from {len(content_images)} page image(s)")
-                pool_srcs = list(content_images)[: TARGET_SCENES * 2]
-                resolved = await resolve_scene_images(pool_srcs, f"{render_id}_fill")
+                pool_srcs = list(content_images)[: target_scenes * 2]
+                resolved = await resolve_scene_images(pool_srcs, f"{render_id}_fill", vet=True)
                 for src, path in zip(pool_srcs, resolved):
                     if path:
                         filler.append(path)
@@ -1352,17 +1552,44 @@ async def _assemble_render(
         gathered, gathered_src = [], []
         if content_images:
             print(f"  🖼️  Trying {len(content_images)} image(s) from the page")
-            pool_srcs = list(content_images)[: TARGET_SCENES * 2]
-            resolved = await resolve_scene_images(pool_srcs, render_id)
-            for src, path in zip(pool_srcs, resolved):
-                if path and len(gathered) < TARGET_SCENES:
-                    gathered.append(path)
-                    gathered_src.append(src)
-            print(f"  ✅ {len(gathered)} usable content image(s)")
+            pool_srcs = list(content_images)[: target_scenes * 2]
+            resolved = await resolve_scene_images(pool_srcs, render_id, vet=True)
+            # Classify every survivor and pick the best, coherent set -- not
+            # just the first N in scrape order. This is what keeps a dev-tool's
+            # founder headshots out of the ad in favour of its product UI.
+            cands = [
+                (path, src, idx)
+                for idx, (src, path) in enumerate(zip(pool_srcs, resolved))
+                if path
+            ]
+            ranked = select_scenes(cands, site_intent, target_scenes)
+            good  = [(p, s) for p, s, is_face in ranked if not is_face]
+            faces = [(p, s) for p, s, is_face in ranked if is_face]
+
+            if len(good) >= target_scenes:
+                picks = good[:target_scenes]
+            elif len(good) >= 3:
+                # Enough good footage to carry the ad, but fewer than a long ad
+                # wants. Reuse the good shots to reach the count rather than
+                # padding with founder faces or footer/cookie-banner
+                # screenshots — the exact scrappiness this is here to avoid.
+                # Repeats land ~len(good) apart, never back to back.
+                picks = [good[i % len(good)] for i in range(target_scenes)]
+                if len(good) < target_scenes:
+                    print(f"  🔁 Reusing {len(good)} good shot(s) to reach {target_scenes} scenes")
+            else:
+                # Genuinely image-poor: take what there is (faces included) and
+                # let the screenshot top-up below fill the rest.
+                picks = (good + faces)[:target_scenes]
+
+            gathered     = [p for p, s in picks]
+            gathered_src = [s for p, s in picks]
+            print(f"  ✅ {len(gathered)} content scene(s) "
+                  f"({len(good)} distinct good, {len(faces)} face(s) available)")
 
         # Top up with screenshots if the page gave us too few.
-        if len(gathered) < TARGET_SCENES and website_url:
-            need = TARGET_SCENES - len(gathered)
+        if len(gathered) < target_scenes and website_url:
+            need = target_scenes - len(gathered)
             print(f"  📸 Topping up with {need} screenshot(s) from: {website_url}")
             shots = await capture_website_screenshots(
                 url=website_url,
@@ -1553,7 +1780,7 @@ async def _assemble_render(
         # How many shots the ad was actually cut from. The editor needs this to
         # lay out its scene list — a page that yields four usable images makes a
         # four-scene ad, not six.
-        "scene_count":   len(screenshot_paths) or TARGET_SCENES,
+        "scene_count":   len(screenshot_paths) or target_scenes,
         # One entry per scene: the URL it was built from, or "" for a scene cut
         # from a screenshot or stock clip. The editor sends these back so that
         # deleting one scene does not reshuffle the others.

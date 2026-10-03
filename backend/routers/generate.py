@@ -147,6 +147,7 @@ async def generate_video(request: VideoRequest):
             duration=duration,
             website_url=url,
             content_images=scraped.get("images") or [],
+            site_intent=scraped.get("site_intent") or "unknown",
         )
 
         return {

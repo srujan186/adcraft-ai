@@ -1,5 +1,0 @@
-{
-  "url": "harkirat.classx.co.in",
-  "ad_style": "bold",
-  "duration": 15
-}
