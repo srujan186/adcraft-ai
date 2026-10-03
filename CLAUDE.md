@@ -41,7 +41,7 @@ adcraft-ai/
 ├── backend/          FastAPI. The whole generation pipeline.
 │   ├── server.py     App entry. CORS, routers, static /api/output mount.
 │   ├── routers/      scrape.py, generate.py
-│   ├── services/     scraper, script_generator, tts, music, pexels, video_assembler
+│   ├── services/     scraper, visual_sourcing, script_generator, tts, music, pexels, video_assembler
 │   ├── models/       Pydantic schemas + Kokoro .onnx/.bin weights
 │   ├── music/        5 royalty-free mp3 beds (git-lfs)
 │   ├── output/       Rendered MP4s (gitignored)

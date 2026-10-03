@@ -209,6 +209,53 @@ changed and why, since some of the fixes are load-bearing:
     users saw ffmpeg stderr and absolute Windows paths. `_fail()` logs the
     traceback and returns a sentence instead.
 
+### Visual sourcing: where an ad's scenes come from (`services/visual_sourcing.py`)
+
+The hard part of a good ad is finding the *right* visuals, and different sites
+hide them in different places. Rather than special-case each site, the pipeline
+splits the problem in two: **sourcing** (text/structure intelligence, in
+`visual_sourcing.py`, at scrape time) decides which image URLs are worth using
+and in what order; **assembly** (pixel intelligence, in `video_assembler.py`)
+then downloads, vets, classifies and selects them. Each stage uses only the data
+it has.
+
+The architecture is **Profile → Source → Score**, and nothing in it is
+per-site:
+
+- **Profile** — `detect_site_intent` → `saas` / `commerce` / `unknown`, from the
+  rendered page's own keywords.
+- **Source** — `extract_candidates` pulls every plausible image off a page,
+  each tagged with **provenance**: the source page, the **section heading** it
+  sat under, and its alt text. For a SaaS site (whose product UI lives on
+  sub-pages, not the marketing homepage) it also crawls the site's own product
+  pages, found via **`discover_product_pages`** = nav-link semantics +
+  **`sitemap.xml`** — never a hardcoded path list.
+- **Score/order** — `order_candidates` ranks by **ownership** (own-product >
+  neutral > third-party), then source (product-page > homepage), then size.
+
+**Ownership is the signal that replaced the two old hacks**, and it needs no
+list of brand names. An image is third-party when the heading it sits under
+reads like a case study — the universal shape is *"{external company} {verb}
+with {business}"* ("Hertz unifies commerce with Stripe"), or a "customers /
+trusted by / case studies" section. Validated across a deliberate spread:
+
+- **stripe.com** (customer-showcase) — 18 of 35 homepage images flagged
+  third-party; the ad now shows Stripe's **own** Billing, Checkout, invoice and
+  pricing UI, crawled from `/billing/features` and `/payments/checkout`.
+- **nike.com** (commerce) — no crawl, homepage product photos, unchanged.
+- **linear / notion** (dev-tools) — product pages found via sitemap
+  (`/features`, `/product/demos`).
+- **pentagram.com** (agency) — 174 of 175 images are client work, correctly all
+  third-party; with no "own product" it falls back to the portfolio, which is
+  an agency's actual pitch.
+
+Two things keep it robust: SVGs are down-ranked (vector icons/logos, never good
+footage), and when ownership ordering surfaces junk (a `close.svg`, a social
+card), **assembly's pixel vetting is the safety net** — the text stage never has
+to be perfect because the pixel stage runs after it. `_html` is stashed on the
+scrape result and popped in `_finalize_result` (the single success point where
+sourcing runs), so it never reaches the API.
+
 ### Page images are vetted before they become scenes
 
 A scrape returns the page's own images ranked by HTML signals only. On a real

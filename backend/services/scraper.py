@@ -986,7 +986,41 @@ async def scrape_with_httpx(url: str) -> dict:
         )
     
     print(f"  📄 httpx got {len(html)} chars")
-    return await _parse_html_off_loop(html, url)
+    result = await _parse_html_off_loop(html, url)
+    result["_html"] = html   # for the product-page crawl; popped before return
+    return result
+
+# ─── Page render helper (used by the visual-sourcing product-page crawl) ─────
+_CRAWL_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
+
+def _render_html_sync(url: str) -> str:
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(
+            headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"]
+        )
+        try:
+            page = browser.new_context(
+                viewport={"width": 1280, "height": 900}, user_agent=_CRAWL_UA
+            ).new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            page.wait_for_timeout(2000)
+            return page.content()
+        finally:
+            browser.close()
+
+
+async def _render_html(url: str) -> str:
+    """Render a sub-page to HTML, off the event loop (Windows-safe)."""
+    from concurrent.futures import ThreadPoolExecutor
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor() as pool:
+        return await loop.run_in_executor(pool, _render_html_sync, url)
+
 
 async def scrape_with_playwright(url: str) -> dict:
     """
@@ -1098,7 +1132,12 @@ async def scrape_with_playwright(url: str) -> dict:
             )
 
         print(f"  📄 Playwright got {len(html)} chars of HTML")
-        return await _parse_html_off_loop(html, url)
+        result = await _parse_html_off_loop(html, url)
+        # Stash the homepage HTML so the product-page crawl can run later, at
+        # the single success point in scrape_business_url — enriching here would
+        # miss the httpx path, and enriching in both would crawl twice.
+        result["_html"] = html
+        return result
 
     except Exception as e:
         raise Exception(f"Playwright failed: {str(e)}")
@@ -1316,6 +1355,34 @@ async def _scrape_one(url: str) -> dict:
     raise Exception(playwright_error or httpx_error or f"Could not reach {url}")
 
 
+async def _finalize_result(result: dict, url: str) -> dict:
+    """
+    Source the ad's candidate images, then drop internal keys.
+
+    The whole visual-sourcing flow (homepage + product-page crawl, ownership
+    ranking) runs here — the single success point — so it fires whichever
+    scraper produced the result, exactly once. `_html` is popped so it never
+    reaches the API response.
+    """
+    from services import visual_sourcing as vs
+
+    html = result.pop("_html", "")
+    if html and not result.get("scrape_failed"):
+        try:
+            ordered = await vs.source_images_for_ad(
+                url,
+                html,
+                result.get("business_name", ""),
+                result.get("site_intent", "unknown"),
+                render_page=_render_html,
+            )
+            if ordered:
+                result["images"] = ordered[:16]
+        except Exception as e:
+            print(f"  ⚠️  visual sourcing skipped: {str(e)[:80]}")
+    return result
+
+
 async def scrape_business_url(url: str) -> dict:
     """
     Main entry point for scraping.
@@ -1334,7 +1401,7 @@ async def scrape_business_url(url: str) -> dict:
     last_error = ""
     for i, candidate in enumerate(candidates):
         try:
-            return await _scrape_one(candidate)
+            return await _finalize_result(await _scrape_one(candidate), candidate)
         except Exception as e:
             last_error = str(e)
             print(f"⚠️  {candidate} failed: {last_error[:120]}")
