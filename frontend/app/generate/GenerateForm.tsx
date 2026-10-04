@@ -2,7 +2,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { generateVideo, type AdStyle } from "@/lib/api";
-import { resetEditorState } from "@/lib/clientStore";
+import { resetEditorState, resultStore } from "@/lib/clientStore";
 import GeneratingOverlay from "./GeneratingOverlay";
 
 const STYLES: { key: AdStyle; name: string; emoji: string; desc: string }[] = [
@@ -65,7 +65,11 @@ export default function GenerateForm() {
       // Drop the previous ad's scene uploads and banner before the new
       // result lands, or they bleed into an unrelated brand's video.
       resetEditorState();
-      sessionStorage.setItem("adcraft_result", JSON.stringify(result));
+      // Write THROUGH the store, not sessionStorage directly: the store keeps a
+      // module-level cache and getSnapshot returns it, so a raw setItem left the
+      // result page serving the previous ad until a full reload. This updates
+      // the cache and notifies the page immediately.
+      resultStore.write(result);
       router.push("/result");
     } catch (err: unknown) {
       clearTimeout(stepTimer1);

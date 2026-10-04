@@ -118,9 +118,15 @@ def build_prompt(
     # trail off into silence). If you change the TTS speed, re-measure and
     # re-derive these — at the old 1.3x these were 2.7/2.5/3.0 and a 0.95x voice
     # would overrun them.
-    target_words = int(duration * 2.5)   # ideal centre (37 for 15s, 75 for 30s)
-    min_words    = int(duration * 2.2)   # floor        (33 for 15s, 66 for 30s)
-    max_words    = int(duration * 2.7)   # hard ceiling (40 for 15s, 81 for 30s)
+    # Rate re-measured on REAL generated scripts (not isolated sentences):
+    # ~2.3 words/sec at 0.95x, because every sentence and comma adds a pause and
+    # a full 30s script has many. The earlier 2.5/2.7 budget produced ~35s of
+    # speech for 30s, which the fit step then had to compress ~1.18x — audible,
+    # not calm. These lower multipliers let the script fit the ad at the calm
+    # base pace, so the fit step is only a rare safety net.
+    target_words = int(duration * 1.9)   # ideal centre (28 for 15s, 57 for 30s)
+    min_words    = int(duration * 1.65)  # floor        (24 for 15s, 49 for 30s)
+    max_words    = int(duration * 2.1)   # ceiling      (31 for 15s, 63 for 30s)
 
     # The arc scales with length. A 15s ad is a tight four-beat punch; a 30s ad
     # has room for a real story, so the old "EXACTLY 4 sentences" rule (which
@@ -147,8 +153,9 @@ def build_prompt(
         brand_rule = "- Mention the brand name exactly once, in sentence 4."
     else:
         structure_block = (
-            "STRUCTURE — write 7-8 complete sentences (not fragments): a full "
-            f"{duration}-second arc, each sentence a distinct beat.\n"
+            "STRUCTURE — write 6-7 complete sentences (not fragments): a full "
+            f"{duration}-second arc, each sentence a distinct beat. Keep each "
+            "sentence tight (8-11 words) — the ad has a fixed length.\n"
             "1. HOOK (8-10 words) — a relatable problem or a bold claim\n"
             "2. STAKES (10-13 words) — why that problem costs time, money, or momentum\n"
             f"3. INTRODUCE (10-13 words) — what {business_name} is and who it's for\n"
@@ -161,13 +168,12 @@ def build_prompt(
             "(Beats 7 and 8 may merge if you have already reached the word target.)"
         )
         example_block = (
-            f'✅ TARGET (~80 words, 7-8 sentences):\n'
-            f'"Scaling a business shouldn\'t mean drowning in complexity. Every week, teams '
-            f'lose hours to tools that don\'t talk to each other and work that breaks under '
-            f'pressure. {business_name} brings it all into one place, built for the people '
-            f'who actually do the work. Set it up in minutes, not months. Watch tasks that '
-            f'used to take days finish before lunch. No steep learning curve, no hidden costs. '
-            f'Get started with {business_name} today."'
+            f'✅ TARGET (~57 words, 7 sentences):\n'
+            f'"Scaling a business shouldn\'t mean drowning in complexity. Teams lose hours '
+            f'to tools that don\'t talk to each other. {business_name} brings it into one '
+            f'place, built for the people who do the work. Set it up in minutes, not months. '
+            f'Tasks that took days now finish before lunch. No steep learning curve, no '
+            f'hidden costs. Get started with {business_name} today."'
         )
         brand_rule = "- Mention the brand name once or twice: in the INTRODUCE beat and the final CTA."
 

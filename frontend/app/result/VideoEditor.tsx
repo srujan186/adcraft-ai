@@ -419,6 +419,13 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
     );
     writeSlots(next);
     setPickerScene(null);
+    // Show the change straight away. The live preview mirrors the scene under
+    // the playhead, so without this a swap only updated the timeline thumbnail
+    // while the big preview kept showing whatever scene was playing. Pause and
+    // seek to the scene just changed so its new image is on screen.
+    const v = videoRef.current;
+    if (v) { v.pause(); setPlaying(false); }
+    showScene(index);
   }
 
   /** Append a scene and open the picker on it straight away. */

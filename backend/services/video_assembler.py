@@ -1199,8 +1199,14 @@ def _vet_scene_image(im: "Image.Image") -> str:
     not.
     """
     w, h = im.size
-    if min(w, h) < 200:
+    # Resolution floor, two ways. A scene is cover-cropped up to 1280x720, so a
+    # small image is scaled 2-3x and looks blurry on screen. min < 300 is an
+    # icon/badge; a long side under 700 means even a well-proportioned shot
+    # upscales past ~1.8x — visibly soft.
+    if min(w, h) < 300:
         return f"too small ({w}x{h}) -- an icon or badge"
+    if max(w, h) < 700:
+        return f"low resolution ({w}x{h}) -- would be blurry at 720p"
 
     ar = w / h if h else 0
     if ar > 2.6 or ar < 0.42:
@@ -1698,16 +1704,47 @@ async def _assemble_render(
         music_style    = script.get("music_style", "upbeat")
 
         if voiceover_text:
-            # Generate speech at natural Kokoro pace (no speed adjustment)
-            # The LLM writes a short enough script so no stretching is needed.
+            # Generate speech at the calm base pace (tts.DEFAULT_SPEED).
             await generate_voiceover(
                 text=voiceover_text,
                 output_path=voiceover_wav
             )
 
-            # Convert WAV → MP3 (no atempo, preserves pitch perfectly)
-            wav_to_mp3(voiceover_wav, voiceover_mp3)
-            voiceover_final = voiceover_mp3  # use as-is at natural speed
+            # Fit the narration inside the ad so its final line always lands.
+            # mix_audio hard-cuts at -t duration, so a voiceover even slightly
+            # longer than the ad loses its last words — which is exactly what a
+            # calm (slower) pace plus an over-length script produced. Leave a
+            # short tail, and only ever speed up: a short script is left calm,
+            # never stretched into a drag.
+            import wave
+            import contextlib
+            try:
+                with contextlib.closing(wave.open(voiceover_wav, "rb")) as w:
+                    vo_dur = w.getnframes() / float(w.getframerate() or 1)
+            except Exception:
+                vo_dur = 0.0
+
+            fit_target = max(1.0, duration - 0.4)
+            if vo_dur > fit_target + 0.05:
+                factor = vo_dur / fit_target            # > 1 → speed up
+                if factor <= 2.0:
+                    afilter = f"atempo={factor:.3f}"
+                else:                                   # atempo caps at 2x each
+                    half = factor ** 0.5
+                    afilter = f"atempo={half:.3f},atempo={half:.3f}"
+                print(f"  🗣️  Narration {vo_dur:.1f}s > {fit_target:.1f}s — "
+                      f"nudging {factor:.2f}x so the full script is heard")
+                r = subprocess.run(
+                    ["ffmpeg", "-y", "-i", voiceover_wav, "-filter:a", afilter,
+                     "-codec:a", "libmp3lame", "-qscale:a", "2", voiceover_mp3],
+                    capture_output=True, text=True,
+                )
+                if r.returncode != 0:
+                    print("  ⚠️  Fit failed — using natural pace")
+                    wav_to_mp3(voiceover_wav, voiceover_mp3)
+            else:
+                wav_to_mp3(voiceover_wav, voiceover_mp3)
+            voiceover_final = voiceover_mp3
 
             # Get and prepare music
             raw_music_path = get_music_path(music_style)
