@@ -1,0 +1,19 @@
+{
+  "name": "lumen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lumen — self-serve CTV advertising platform. Windows-friendly task runner (make parity).",
+  "scripts": {
+    "dev": "docker compose up --build",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f --tail=100",
+    "build": "docker compose build",
+    "api:test": "cd api && venv/Scripts/python.exe -m pytest -q",
+    "web:typecheck": "cd web && pnpm typecheck",
+    "web:build": "cd web && pnpm build",
+    "test": "pnpm api:test",
+    "gen:api": "cd web && pnpm gen:api",
+    "seed": "docker compose exec api python -m app.cli seed",
+    "simulate": "docker compose exec api python -m app.cli simulate --hours 24"
+  }
+}

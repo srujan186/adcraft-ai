@@ -1,0 +1,78 @@
+# Strategy playbook — single source of truth for wizard defaults/warnings, the agent, and recommendation priors.
+version: 1
+
+goal_requirements:
+  awareness: []
+  traffic: [pixel.page_view]
+  retargeting: [pixel.page_view]
+  leads: [pixel.page_view, pixel.lead]
+  sales: [pixel.page_view, pixel.purchase]
+  app_promotion: [app.connected]
+  abm: [audience.company_or_firmographic]
+
+goal_defaults:
+  awareness:     {kpi: cpm,  attribution_window_hours: 168, bidding: automatic, outcome: impressions}
+  traffic:       {kpi: cps,  attribution_window_hours: 168, bidding: automatic, outcome: sessions}
+  leads:         {kpi: cpl,  attribution_window_hours: 720, bidding: automatic, outcome: sessions}
+  sales:         {kpi: cpp,  attribution_window_hours: 720, bidding: automatic, outcome: purchases}
+  retargeting:   {kpi: cps,  attribution_window_hours: 168, bidding: automatic, outcome: sessions}
+  app_promotion: {kpi: cpi,  attribution_window_hours: 168, bidding: automatic, outcome: installs}
+  abm:           {kpi: cost_per_account, attribution_window_hours: 720, bidding: automatic, outcome: households}
+
+kpi_benchmarks:   # used by "Help me set my target" (USD)
+  cpm: {p25: 18, median: 24, p75: 32}
+  cps: {p25: 1.2, median: 2.5, p75: 4.5}
+  cpl: {p25: 25, median: 60, p75: 140}
+  cpp: {p25: 30, median: 70, p75: 160}
+  roas: {p25: 1.5, median: 2.5, p75: 4.5}
+  cpi: {p25: 4, median: 9, p75: 18}
+
+min_daily_budget_usd: 50
+
+rules:
+  - id: reach_for_long_window
+    when: "campaign.attribution_window_hours >= 168"
+    advice: "Long attribution windows reward reach: prefer broad prospecting (interests, demographics, lookalikes) over narrow targeting."
+  - id: separate_warm_cold
+    when: "strategy.include_audiences has web_or_crm AND (strategy.interests OR strategy.demographics)"
+    severity: warning
+    message: "This strategy mixes warm (retargeting) and cold (prospecting) audiences. Split into two strategies to see what works."
+  - id: retargeting_min_size
+    when: "goal == retargeting AND included_web_audience_households < 1000"
+    severity: warning
+    message: "Your web audience is too small to deliver. Run a prospecting strategy to grow site traffic first."
+  - id: broad_during_learning
+    when: "campaign.status in [draft, learning]"
+    advice: "Start broad. Narrow targeting limits inventory and slows the 14-day learning phase."
+  - id: avoid_pausing
+    advice: "Avoid pausing: resuming restarts a 5-day learning phase. Edit budget/targeting instead."
+  - id: budget_learning
+    advice: "Higher daily budgets give the system more data to learn from within the 14-day window."
+  - id: manual_cpm_floor
+    when: "bidding == manual AND max_cpm < median_floor(selected_channels)"
+    severity: warning
+    message: "Your max CPM is below typical floor prices for the selected channels; delivery will be limited."
+  - id: creatives_rotation
+    advice: "Use 2–3 creatives per strategy and refresh any creative running more than 3 weeks."
+  - id: evaluate_on_rolling
+    advice: "Judge performance on 3- or 7-day rolling averages, not single days."
+
+viewing_curve:   # relative CTV viewing by local hour 0..23 (weekday); weekend multiply hours 9-17 by 1.3
+  [0.35,0.2,0.12,0.08,0.06,0.07,0.15,0.3,0.4,0.45,0.5,0.55,0.6,0.6,0.62,0.68,0.75,0.85,1.0,1.25,1.4,1.35,1.05,0.65]
+
+uplift_priors:   # median relative uplift used until enough real observations
+  increase_budget: {metric: outcome, median: 0.35}
+  expand_audience: {metric: impressions, median: 0.45}
+  switch_to_auto_bidding: {metric: outcome, median: 0.22}
+  broaden_placement: {metric: impressions, median: 0.30}
+  split_retargeting_prospecting: {metric: outcome, median: 0.12}
+  extend_attribution_window: {metric: conversions, median: 0.25}
+  add_creative: {metric: visit_rate, median: 0.10}
+
+restricted_categories: [cannabis, cbd, alcohol, firearms, gambling, political, pharma, dating]
+
+faq:
+  "What audience should I target?": "Start with warm audiences (site visitors, CRM) in one strategy and a broad prospecting strategy (interests, demographics, lookalikes) in another. Keep targeting broad during the 14-day learning phase."
+  "Should I use automatic or manual bidding?": "Automatic, unless you have a strict CPM ceiling. Automatic bids more for households likely to convert and less elsewhere."
+  "Are CTV ads clickable?": "No. Results are measured by matching households that saw the ad to visits and purchases on your site within the attribution window."
+  "Do I need a pixel before I launch?": "For Traffic, Leads, Sales and Retargeting, yes. Awareness campaigns can run without one."

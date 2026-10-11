@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* ───────────────────────────────────────────────────────────────────────────
+   AdCraft AI design tokens — docs/05-design-system.md
+   Clean light B2B SaaS: white canvas, dark-navy top nav, slate text,
+   one saturated indigo accent, hairline borders, generous whitespace, Inter.
+   ─────────────────────────────────────────────────────────────────────────── */
+@theme {
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f8fafc; /* page sections, table header, wizard canvas */
+  --color-surface: #ffffff; /* cards */
+  --color-border: #e2e8f0; /* hairlines */
+  --color-border-strong: #cbd5e1;
+
+  --color-text: #0f172b; /* headings (slate-900) */
+  --color-text-body: #314158; /* body (slate-700) */
+  --color-text-muted: #62748e; /* helper text (slate-500) */
+
+  --color-nav: #1d293d; /* top nav background (dark navy) */
+  --color-nav-text: #e2e8f0;
+  --color-nav-active: #ffffff; /* + 2px underline in primary-300 */
+
+  --color-primary: #4f39f6; /* buttons, active step, links, selected radio */
+  --color-primary-hover: #432dd7;
+  --color-primary-50: #eef2ff; /* selected option background */
+  --color-primary-300: #a3b3ff;
+
+  --color-success: #00a63e;
+  --color-success-50: #f0fdf4;
+  --color-warning: #e17100;
+  --color-warning-50: #fffbeb;
+  --color-danger: #e7000b;
+  --color-danger-50: #fef2f2;
+  --color-info: #155dfc;
+  --color-info-50: #eff6ff;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow-pop: 0 10px 30px rgb(15 23 42 / 0.12);
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text-body);
+  font-family: var(--font-sans);
+  font-size: 14px; /* text-sm base per 05 */
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--color-text);
+}
+
+/* pulsing dot used by the "Learning" status pill */
+@keyframes lumen-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.lumen-pulse {
+  animation: lumen-pulse 1.4s ease-in-out infinite;
+}

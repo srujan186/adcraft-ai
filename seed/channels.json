@@ -1,0 +1,23 @@
+{
+  "_note": "Seed inventory. Names are generic/fictional on purpose (do not ship real publisher names or logos without agreements). Seeder: create the named channels below, then generate filler channels until total = 563 using category weights, reach lognormal(median 1.5M, sigma 1.2) and base CPM per category. A 'AdCraft Performance Network' aggregate channel bundles long-tail inventory.",
+  "total_channels": 563,
+  "category_cpm_usd": {"entertainment": 28, "news": 24, "sports": 38, "kids": 20, "movies": 22, "lifestyle": 21, "music": 18, "spanish": 22, "fast": 15},
+  "category_weights": {"entertainment": 0.25, "news": 0.12, "sports": 0.12, "kids": 0.05, "movies": 0.14, "lifestyle": 0.1, "music": 0.05, "spanish": 0.07, "fast": 0.1},
+  "named": [
+    {"name": "StreamMax Originals", "category": "entertainment", "reach_m": 12.5, "premium": true},
+    {"name": "Magic Kingdom+", "category": "entertainment", "reach_m": 27.0, "premium": true},
+    {"name": "HubStream", "category": "entertainment", "reach_m": 38.9, "premium": true},
+    {"name": "Peak TV", "category": "entertainment", "reach_m": 44.2, "premium": true},
+    {"name": "Summit Plus", "category": "entertainment", "reach_m": 14.6, "premium": true},
+    {"name": "Summit Streaming Network", "category": "entertainment", "reach_m": 49.4, "premium": true},
+    {"name": "Discovery Bros Network", "category": "lifestyle", "reach_m": 27.7, "premium": true},
+    {"name": "SportsCenter Live", "category": "sports", "reach_m": 13.4, "premium": true},
+    {"name": "Global News Now", "category": "news", "reach_m": 4.0, "premium": true},
+    {"name": "Spectrum Cable Apps", "category": "entertainment", "reach_m": 151.9, "premium": false},
+    {"name": "Pluto Free TV", "category": "fast", "reach_m": 81.9, "premium": false},
+    {"name": "AdCraft Performance Network", "category": "fast", "reach_m": 153.4, "premium": false},
+    {"name": "Local News 5 Northwest", "category": "news", "reach_m": 0.4, "premium": false},
+    {"name": "British Movies & TV", "category": "movies", "reach_m": 1.1, "premium": false},
+    {"name": "Thriller Movies & TV", "category": "movies", "reach_m": 1.3, "premium": false}
+  ]
+}

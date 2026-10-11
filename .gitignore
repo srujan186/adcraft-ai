@@ -17,3 +17,12 @@ random.txt
 
 # Written by backend/test_tts.py every time it runs.
 backend/test_voice.wav
+
+# --- AdCraft AI platform ---
+api/venv/
+web/node_modules/
+web/.next/
+.env
+api/.env
+web/.env.local
+api/var/

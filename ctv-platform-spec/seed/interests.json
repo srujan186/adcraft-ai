@@ -1,0 +1,31 @@
+{
+  "_note": "Interest taxonomy (In-Market & Interests). reach_households in millions of US HH. Seeder converts to integers and generates household interest assignment proportional to reach.",
+  "segments": [
+    {"name": "Arts and Events", "reach_m": 42.3, "children": ["Concerts", "Theater", "Museums", "Festivals"]},
+    {"name": "Auto, Cars and Trucks", "reach_m": 58.1, "children": ["In-market: New Car", "In-market: Used Car", "SUV & Crossover Owners", "Luxury Cars", "Electric Vehicles", "Trucks"]},
+    {"name": "Beauty and Style", "reach_m": 17.2, "children": ["Skincare", "Makeup", "Fashion", "Hair Care"]},
+    {"name": "Books and Literature", "reach_m": 11.4, "children": ["Fiction Readers", "Non-fiction Readers", "Aspiring Authors"]},
+    {"name": "Charity (Philanthropy)", "reach_m": 27.2, "children": ["Donors", "Volunteers"]},
+    {"name": "Children's Products", "reach_m": 4.8, "children": ["Baby Products", "Toys"]},
+    {"name": "Consumer Technology", "reach_m": 36.5, "children": ["Smartphones", "Smart Home", "Gaming Hardware", "AI Tools Adopters"]},
+    {"name": "Education", "reach_m": 21.0, "children": ["Higher Education", "Online Courses", "K-12 Parents"]},
+    {"name": "Finance", "reach_m": 33.7, "children": ["Investing", "Credit Cards", "Insurance", "Mortgages", "Crypto"]},
+    {"name": "Food and Drink", "reach_m": 48.9, "children": ["Cooking", "Vegetarian & Vegan", "Wine", "Coffee", "Meal Kits"]},
+    {"name": "Gaming", "reach_m": 29.4, "children": ["Mobile Gamers", "Console Gamers", "PC Gamers", "Casual Games"]},
+    {"name": "Health and Fitness", "reach_m": 39.2, "children": ["Gym & Fitness", "Running", "Yoga", "Supplements", "Hearing & Vision"]},
+    {"name": "Home and Garden", "reach_m": 44.0, "children": ["Home Improvement", "Furniture & Decor", "Gardening", "Lawn Care", "Home Buyers"]},
+    {"name": "Pets", "reach_m": 41.6, "children": ["Dog Owners", "Cat Owners", "Pet Care & Vets"]},
+    {"name": "Shopping", "reach_m": 61.3, "children": ["Online Shoppers", "Deal Seekers", "Luxury Shoppers", "Subscription Boxes"]},
+    {"name": "Sports", "reach_m": 52.8, "children": ["American Football", "Baseball", "Basketball", "Soccer", "Golf", "Outdoor & Hunting", "Cycling", "Swimming"]},
+    {"name": "Travel", "reach_m": 30.9, "children": ["Air Travel", "Cruises", "Hotels", "Road Trips"]},
+    {"name": "Business and B2B", "reach_m": 18.6, "children": ["Small Business Owners", "IT Decision Makers", "Marketing Professionals", "SaaS Buyers"]}
+  ],
+  "demographics": {
+    "age": ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"],
+    "gender": ["female", "male"],
+    "income": ["<20k", "20k-49k", "50k-99k", "100k-249k", "250k-499k", "500k+"],
+    "education": ["high_school", "some_college", "bachelors", "graduate"],
+    "family": ["no_children", "children_under_6", "children_6_17"],
+    "homeowner": [true, false]
+  }
+}
