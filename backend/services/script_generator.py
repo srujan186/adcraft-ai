@@ -428,9 +428,13 @@ async def generate_ad_script(
                 messages=messages,
                 temperature=0.75,
                 # gpt-oss models emit reasoning tokens *before* the answer, and
-                # those count against this budget. At 1200 the JSON came back
-                # truncated or empty, which parse_ai_response treats as fatal.
-                max_tokens=4000,
+                # those count against this budget. On content-rich sites even 4000
+                # was exhausted by reasoning before the JSON closed, which Groq
+                # rejects as json_validate_failed ("max completion tokens reached").
+                # reasoning_effort="low" curbs the reasoning spend; 8000 gives the
+                # (small) JSON ample room to finish.
+                reasoning_effort="low",
+                max_tokens=8000,
                 # Groq's JSON mode. parse_ai_response still runs -- this just
                 # stops it being the only thing between us and a 500.
                 response_format={"type": "json_object"},
