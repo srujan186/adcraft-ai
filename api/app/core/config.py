@@ -87,7 +87,9 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        # Browsers send Origin with no trailing slash, so "https://x.vercel.app/" would never
+        # match; strip it (the most common way this setting gets pasted wrong).
+        return [o.strip().rstrip("/") for o in self.allowed_origins.split(",") if o.strip().rstrip("/")]
 
 
 @lru_cache
