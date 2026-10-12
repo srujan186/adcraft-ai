@@ -22,7 +22,14 @@ from app.core.security import (
 )
 from app.models.identity import Account, Membership, Role, User
 from app.schemas.account import AccountOut
-from app.schemas.auth import LoginRequest, MeResponse, MembershipOut, SignupRequest, TokenResponse
+from app.schemas.auth import (
+    LoginRequest,
+    MeResponse,
+    MembershipOut,
+    RefreshRequest,
+    SignupRequest,
+    TokenResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -30,16 +37,20 @@ REFRESH_COOKIE = "lumen_refresh"
 REFRESH_PATH = "/api/v1/auth"
 
 
-def _set_refresh_cookie(response: Response, user_id: str) -> None:
+def _set_refresh_cookie(response: Response, user_id: str) -> str:
+    """Issue a refresh token: set it as an httpOnly cookie (same-site deploys, local dev)
+    and return it so the caller also puts it in the response body (cross-site deploys)."""
+    token = create_refresh_token(user_id)
     response.set_cookie(
         REFRESH_COOKIE,
-        create_refresh_token(user_id),
+        token,
         max_age=settings.jwt_refresh_ttl_days * 86400,
         httponly=True,
         samesite="lax",
         secure=False,  # dev over http://localhost; set True behind TLS in prod
         path=REFRESH_PATH,
     )
+    return token
 
 
 async def _first_account_id(db: AsyncSession, user_id) -> str:
@@ -71,8 +82,10 @@ async def signup(body: SignupRequest, response: Response, db: AsyncSession = Dep
     user.last_login_at = dt.datetime.now(dt.timezone.utc)
     await db.commit()
 
-    _set_refresh_cookie(response, str(user.id))
-    return TokenResponse(access_token=create_access_token(str(user.id)), account_id=account.id)
+    refresh_token = _set_refresh_cookie(response, str(user.id))
+    return TokenResponse(
+        access_token=create_access_token(str(user.id)), account_id=account.id, refresh_token=refresh_token
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -85,16 +98,21 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
     account_id = await _first_account_id(db, user.id)
     await db.commit()
 
-    _set_refresh_cookie(response, str(user.id))
-    return TokenResponse(access_token=create_access_token(str(user.id)), account_id=account_id)
+    refresh_token = _set_refresh_cookie(response, str(user.id))
+    return TokenResponse(
+        access_token=create_access_token(str(user.id)), account_id=account_id, refresh_token=refresh_token
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     response: Response,
+    body: RefreshRequest | None = None,
     db: AsyncSession = Depends(get_db),
-    token: str | None = Cookie(default=None, alias=REFRESH_COOKIE),
+    cookie_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE),
 ) -> TokenResponse:
+    # Body first (cross-site deploys can't use the cookie), cookie as the fallback.
+    token = (body.refresh_token if body else None) or cookie_token
     if not token:
         raise AppError("UNAUTHENTICATED", "No refresh token", 401)
     try:
@@ -106,8 +124,8 @@ async def refresh(
     if await db.get(User, user_id) is None:
         raise AppError("UNAUTHENTICATED", "User no longer exists", 401)
     account_id = await _first_account_id(db, user_id)
-    _set_refresh_cookie(response, user_id)
-    return TokenResponse(access_token=create_access_token(user_id), account_id=account_id)
+    refresh_token = _set_refresh_cookie(response, user_id)
+    return TokenResponse(access_token=create_access_token(user_id), account_id=account_id, refresh_token=refresh_token)
 
 
 @router.post("/logout")

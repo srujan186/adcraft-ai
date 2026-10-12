@@ -40,7 +40,7 @@ export default function SignupPage() {
         setError(response.status === 404 ? wrongServerMessage() : errorMessage(error, "Could not create your account."));
         return;
       }
-      setSession(data.access_token, String(data.account_id));
+      setSession(data.access_token, String(data.account_id), data.refresh_token);
       router.push("/dashboard");
     } catch (err) {
       // Network-level failure (CORS, server down/asleep, timeout): fetch threw, so say so.

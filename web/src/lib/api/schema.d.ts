@@ -2310,6 +2310,11 @@ export interface components {
             /** Households */
             households: number[];
         };
+        /** RefreshRequest */
+        RefreshRequest: {
+            /** Refresh Token */
+            refresh_token?: string | null;
+        };
         /** RejectBody */
         RejectBody: {
             /** Reason Code */
@@ -2519,6 +2524,8 @@ export interface components {
              * Format: uuid
              */
             account_id: string;
+            /** Refresh Token */
+            refresh_token?: string | null;
         };
         /** TopupRequest */
         TopupRequest: {
@@ -2689,7 +2696,11 @@ export interface operations {
                 lumen_refresh?: string | null;
             };
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

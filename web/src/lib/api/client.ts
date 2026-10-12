@@ -2,7 +2,7 @@
 
 import createClient, { type Middleware } from "openapi-fetch";
 
-import { clearSession, getAccessToken, getAccountId, setAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken, getAccountId, getRefreshToken, setAccessToken, setRefreshToken } from "@/lib/auth";
 import { API_URL } from "@/lib/utils";
 import type { paths } from "./schema";
 
@@ -36,13 +36,17 @@ async function tryRefresh(): Promise<boolean> {
   if (!refreshing) {
     refreshing = (async () => {
       try {
+        // Send the stored refresh token in the body: cross-site, the cookie never arrives.
         const r = await fetch(`${API_URL}/api/v1/auth/refresh`, {
           method: "POST",
           credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: getRefreshToken() }),
         });
         if (!r.ok) return false;
-        const data = (await r.json()) as { access_token: string };
+        const data = (await r.json()) as { access_token: string; refresh_token?: string | null };
         setAccessToken(data.access_token);
+        setRefreshToken(data.refresh_token); // rotated by the API
         return true;
       } catch {
         return false;
@@ -64,7 +68,11 @@ const auth: Middleware = {
     return request;
   },
   async onResponse({ request, response }) {
-    if (response.status !== 401 || request.url.includes("/api/v1/auth/")) return response;
+    // Only the credential endpoints must not trigger a refresh (that would loop or mask a
+    // bad password); /auth/me is an ordinary authenticated call and should refresh.
+    if (response.status !== 401 || /\/api\/v1\/auth\/(login|signup|refresh|logout)\b/.test(request.url)) {
+      return response;
+    }
     const ok = await tryRefresh();
     if (!ok) {
       clearSession();

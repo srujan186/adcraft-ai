@@ -25,6 +25,14 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     account_id: uuid.UUID
+    # Also returned in the body (not just the httpOnly cookie): when the web app and the
+    # API are on different sites (Vercel + Render/HF), browsers won't store or send a
+    # SameSite=Lax cookie cross-site, so the client keeps this and posts it to /refresh.
+    refresh_token: str | None = None
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str | None = None
 
 
 class MembershipOut(BaseModel):
