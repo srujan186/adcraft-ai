@@ -8,9 +8,9 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
-import { api } from "@/lib/api/client";
+import { ACTION_TIMEOUT_MS, api, unreachableMessage, wrongServerMessage } from "@/lib/api/client";
 import { setSession } from "@/lib/auth";
-import { errorMessage } from "@/lib/hooks";
+import { errorMessage, useSlow } from "@/lib/hooks";
 import { PRODUCT_NAME } from "@/lib/utils";
 
 export default function SignupPage() {
@@ -18,6 +18,7 @@ export default function SignupPage() {
   const [form, setForm] = useState({ full_name: "", company: "", email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const slow = useSlow(busy);
 
   const set = (k: keyof typeof form) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -30,14 +31,23 @@ export default function SignupPage() {
       return;
     }
     setBusy(true);
-    const { data, error } = await api.POST("/api/v1/auth/signup", { body: form });
-    setBusy(false);
-    if (error || !data) {
-      setError(errorMessage(error, "Could not create your account."));
-      return;
+    try {
+      const { data, error, response } = await api.POST("/api/v1/auth/signup", {
+        body: form,
+        signal: AbortSignal.timeout(ACTION_TIMEOUT_MS),
+      });
+      if (error || !data) {
+        setError(response.status === 404 ? wrongServerMessage() : errorMessage(error, "Could not create your account."));
+        return;
+      }
+      setSession(data.access_token, String(data.account_id));
+      router.push("/dashboard");
+    } catch (err) {
+      // Network-level failure (CORS, server down/asleep, timeout): fetch threw, so say so.
+      setError(unreachableMessage(err));
+    } finally {
+      setBusy(false);
     }
-    setSession(data.access_token, String(data.account_id));
-    router.push("/dashboard");
   }
 
   return (
@@ -72,6 +82,11 @@ export default function SignupPage() {
               <Input id="password" type="password" value={form.password} onChange={set("password")} required autoComplete="new-password" />
             </Field>
             {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+            {slow && (
+              <p className="text-sm text-[var(--color-text-muted)]" role="status">
+                Waking the server up — the first request after a quiet period can take up to a minute.
+              </p>
+            )}
             <Button type="submit" className="w-full" disabled={busy} id="signup-submit">
               {busy ? "Creating…" : "Create account"}
             </Button>

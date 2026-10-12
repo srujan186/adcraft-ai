@@ -8,6 +8,27 @@ import type { paths } from "./schema";
 
 export const api = createClient<paths>({ baseUrl: API_URL, credentials: "include" });
 
+/** How long a user action waits before giving up. Free hosts cold-start in 30-90s. */
+export const ACTION_TIMEOUT_MS = 90_000;
+
+/**
+ * openapi-fetch returns `{ error }` for HTTP errors but *throws* when the request never
+ * completes (CORS rejection, DNS, server down or asleep, timeout). A caller that only
+ * checks `error` then hangs forever with no message — so user actions catch and use this.
+ */
+export function unreachableMessage(err: unknown): string {
+  const host = API_URL.replace(/^https?:\/\//, "");
+  if (err instanceof DOMException && err.name === "TimeoutError") {
+    return `The server (${host}) didn't respond in time. If it was asleep it may be awake now — please try again.`;
+  }
+  return `Can't reach the server (${host}). It may be down, or not set up to accept requests from this site.`;
+}
+
+/** A 404 from an auth route means NEXT_PUBLIC_API_URL points at a server without this API. */
+export function wrongServerMessage(): string {
+  return `The server at ${API_URL.replace(/^https?:\/\//, "")} has no login service — this site is connected to the wrong server.`;
+}
+
 // Single-flight refresh so parallel 401s don't each hit /auth/refresh.
 let refreshing: Promise<boolean> | null = null;
 

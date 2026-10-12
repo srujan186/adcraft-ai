@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
@@ -18,8 +19,25 @@ export type AudienceT = components["schemas"]["AudienceOut"];
 
 /** Shape of our API error envelope. */
 export function errorMessage(err: unknown, fallback = "Something went wrong"): string {
-  const e = err as { error?: { message?: string } } | undefined;
-  return e?.error?.message ?? fallback;
+  // Our API's envelope is {error:{message}}; FastAPI defaults (and other servers) use {detail}.
+  const e = err as { error?: { message?: string }; detail?: unknown } | undefined;
+  if (e?.error?.message) return e.error.message;
+  if (typeof e?.detail === "string") return e.detail;
+  return fallback;
+}
+
+/** True once `busy` has lasted `ms` — for "the server is waking up" hints on free hosts. */
+export function useSlow(busy: boolean, ms = 6000): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!busy) {
+      setSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setSlow(true), ms);
+    return () => clearTimeout(t);
+  }, [busy, ms]);
+  return slow;
 }
 
 export function useMe() {
