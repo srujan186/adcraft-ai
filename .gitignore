@@ -26,3 +26,7 @@ web/.next/
 api/.env
 web/.env.local
 api/var/
+
+# Python bytecode (was accidentally committed with the platform; untracked here).
+__pycache__/
+*.pyc
