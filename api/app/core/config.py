@@ -2,8 +2,18 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# libpq-only params that asyncpg rejects (it would forward them as server settings).
+_LIBPQ_ONLY = {"sslmode", "channel_binding"}
+
+
+def _with_query(url: str, scheme: str, query: list[tuple[str, str]]) -> str:
+    p = urlsplit(url)
+    return urlunsplit((scheme, p.netloc, p.path, urlencode(query), p.fragment))
 
 
 class Settings(BaseSettings):
@@ -13,6 +23,30 @@ class Settings(BaseSettings):
     # local Postgres/Redis). In docker these are overridden to postgres:5432 / redis:6379.
     database_url: str = "postgresql+asyncpg://lumen:lumen@localhost:5433/lumen"
     redis_url: str = "redis://localhost:6380/0"
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, v: str) -> str:
+        """Accept a hosted provider's URL as given (Neon/Render/Supabase hand out
+        `postgres://…?sslmode=require&channel_binding=require`) and turn it into the
+        SQLAlchemy asyncpg form: `postgresql+asyncpg://…?ssl=require`."""
+        q = parse_qsl(urlsplit(v).query)
+        ssl = next((val for k, val in q if k == "sslmode"), None)
+        q = [(k, val) for k, val in q if k not in _LIBPQ_ONLY]
+        if ssl and ssl != "disable" and not any(k == "ssl" for k, _ in q):
+            q.append(("ssl", "require"))
+        return _with_query(v, "postgresql+asyncpg", q)
+
+    @property
+    def asyncpg_dsn(self) -> str:
+        """Plain DSN for raw asyncpg.connect() (the seed CLI): libpq scheme and
+        `sslmode=` — asyncpg's DSN parser does not understand `ssl=`."""
+        q = parse_qsl(urlsplit(self.database_url).query)
+        ssl = next((val for k, val in q if k == "ssl"), None)
+        q = [(k, val) for k, val in q if k != "ssl"]
+        if ssl:
+            q.append(("sslmode", ssl))
+        return _with_query(self.database_url, "postgresql", q)
 
     # Object storage (MinIO / S3)
     s3_endpoint: str = "http://localhost:9000"

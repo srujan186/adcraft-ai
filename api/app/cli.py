@@ -30,7 +30,7 @@ DEVICE_WEIGHTS = {"mobile": 0.60, "tablet": 0.25, "desktop": 0.30}  # tv is alwa
 
 
 def _dsn() -> str:
-    return settings.database_url.replace("+asyncpg", "")
+    return settings.asyncpg_dsn
 
 
 def _load(name: str) -> dict:

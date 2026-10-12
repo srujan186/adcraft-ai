@@ -1,0 +1,8 @@
+# Patterns without a slash match only at the context root (api/).
+venv/
+.venv/
+.env
+var/
+.pytest_cache/
+**/__pycache__/
+**/*.pyc

@@ -56,7 +56,8 @@ services:
       ALLOWED_ORIGINS: http://localhost:3000
       PUBLIC_API_URL: http://localhost:8000
     ports: ["8000:8000"]
-    volumes: ["./api:/app"]
+    # seed/ lives at the repo root; app/cli.py resolves it as /seed inside the container.
+    volumes: ["./api:/app", "./seed:/seed:ro"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

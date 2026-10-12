@@ -12,7 +12,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# start.sh may arrive with CRLF from a Windows checkout; /bin/sh can't run that.
+# var/ holds local-storage uploads; make it writable for hosts that run as a
+# non-root user (Hugging Face Spaces runs as uid 1000).
+RUN sed -i 's/\r$//' start.sh \
+    && mkdir -p var/storage && chmod -R a+rwX var
+
 EXPOSE 8000
 
-# Default = API. docker-compose overrides `command` for worker/scheduler.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default = API (migrate, then serve on $PORT or 8000).
+# docker-compose overrides `command` for api/worker/scheduler.
+CMD ["sh", "start.sh"]
