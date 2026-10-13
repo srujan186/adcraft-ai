@@ -1,4 +1,7 @@
+import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+
+import { SHOW_UNFINISHED } from "@/lib/features";
 
 /** Centered empty state (docs/05): simple line illustration, bold title, muted line, optional action. */
 export function EmptyState({
@@ -38,6 +41,8 @@ function DefaultGlyph() {
  * status is honest about which milestone fills it in.
  */
 export function MilestonePlaceholder({ milestone, feature }: { milestone: string; feature: string }) {
+  // Unbuilt screens 404 for customers; they render only when explicitly enabled.
+  if (!SHOW_UNFINISHED) notFound();
   return (
     <div className="px-8 py-8">
       <EmptyState

@@ -41,3 +41,19 @@ stack and marked `staging: pending`.
   network failure shown; Try again recovers). All failed before the fix.
 - Real-data check (563 seeded channels): all 112.3M; largest channel 15.2M; 20 channels 476K;
   smallest 3,953 — all HTTP 200. Staging: pending.
+
+### P0-6 Unfinished pages visible to clients — fixed
+- Root cause: six settings screens rendered `MilestonePlaceholder` ("… building in Mx") and were linked
+  from the menu. API keys had a backend but a placeholder page — and the backend ignored scopes
+  (every key was full admin) and never saved "last used" for read requests (no commit on GETs).
+- Fix: `NEXT_PUBLIC_SHOW_UNFINISHED` flag (off by default) hides Integrations Marketplace, Installed
+  integrations, Invoices, Receipts, Refer & earn and My applications from navigation; their URLs return
+  a real HTTP 404 (`next.config` rewrite; shared list in `src/lib/unfinished-routes.ts`). New API keys
+  page: create with name + access (Read only / Read and write), key shown once with Copy, list with
+  access/created/last used, inline-confirmed revoke, usage example. Backend: scopes validated
+  (`read`/`write`, default `read`) and enforced (read-only key → 403 `SCOPE_REQUIRED` on writes);
+  last-used committed on every authenticated request.
+- Tests: `api/tests/test_api_keys.py` (scope enforcement, validation, last-used on reads, revoke, legacy
+  keys); `web/e2e/settings-unfinished.spec.ts` (no menu link shows "building in"; six URLs → 404; key
+  create → shown once → used → last used → revoke → 401). Backend scope/last-used tests failed before.
+- Decisions recorded in `docs/DECISIONS.md`. Staging: pending.

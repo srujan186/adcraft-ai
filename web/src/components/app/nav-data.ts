@@ -1,4 +1,6 @@
 /** Single source of truth for navigation (docs/04-frontend-spec.md). */
+import { SHOW_UNFINISHED } from "@/lib/features";
+import { UNFINISHED_ROUTES } from "@/lib/unfinished-routes";
 
 export interface NavItem {
   label: string;
@@ -20,7 +22,7 @@ export interface SettingsGroup {
   items: NavItem[];
 }
 
-export const SETTINGS_NAV: SettingsGroup[] = [
+const ALL_SETTINGS_NAV: SettingsGroup[] = [
   {
     group: "Account",
     items: [
@@ -62,3 +64,9 @@ export const SETTINGS_NAV: SettingsGroup[] = [
     ],
   },
 ];
+
+/** Settings navigation as shown: unfinished screens removed, then any group left empty. */
+export const SETTINGS_NAV: SettingsGroup[] = ALL_SETTINGS_NAV.map((g) => ({
+  ...g,
+  items: g.items.filter((i) => SHOW_UNFINISHED || !UNFINISHED_ROUTES.includes(i.href)),
+})).filter((g) => g.items.length > 0);

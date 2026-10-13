@@ -2,13 +2,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+# "read" = GET requests only; "write" = also create/update/delete. Enforced in deps.
+ApiKeyScope = Literal["read", "write"]
 
 
 class ApiKeyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    scopes: list[str] = Field(default_factory=list)
+    scopes: list[ApiKeyScope] = Field(default_factory=lambda: ["read"], min_length=1)
+
+    @field_validator("scopes")
+    @classmethod
+    def _dedupe(cls, v: list[str]) -> list[str]:
+        return sorted(set(v))
 
 
 class ApiKeyOut(BaseModel):

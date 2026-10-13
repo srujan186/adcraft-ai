@@ -13,7 +13,7 @@ import datetime as dt
 from dataclasses import dataclass
 
 import jwt
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,7 +54,12 @@ async def get_current_user(
     return user
 
 
+# Methods an API key with only the "read" scope may call.
+_READ_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
 async def get_current_account(
+    request: Request,
     authorization: str | None = Header(default=None),
     x_account_id: str | None = Header(default=None, alias="X-Account-Id"),
     db: AsyncSession = Depends(get_db),
@@ -67,7 +72,15 @@ async def get_current_account(
         rows = (await db.execute(select(ApiKey).where(ApiKey.prefix == prefix))).scalars().all()
         for key in rows:
             if key.revoked_at is None and verify_api_key(token, key.key_hash):
+                # Keys created before scopes were enforced stored [] and had full access.
+                scopes = set(key.scopes or ["read", "write"])
+                if request.method not in _READ_METHODS and "write" not in scopes:
+                    raise AppError(
+                        "SCOPE_REQUIRED", "This API key is read-only. Create a key with the write scope.", 403
+                    )
+                # Commit now: read-only requests never commit, so last-used was never saved.
                 key.last_used_at = dt.datetime.now(dt.timezone.utc)
+                await db.commit()
                 account = await db.get(Account, key.account_id)
                 if account is None:
                     break

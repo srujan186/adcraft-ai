@@ -1490,7 +1490,7 @@ export interface components {
             /** Name */
             name: string;
             /** Scopes */
-            scopes?: string[];
+            scopes?: ("read" | "write")[];
         };
         /** ApiKeyCreated */
         ApiKeyCreated: {
