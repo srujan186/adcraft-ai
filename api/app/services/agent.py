@@ -1,6 +1,7 @@
 """Ask Agent (docs/10).
 
-The agent answers through Claude, grounded in a context built from live account data: the
+The agent answers through an LLM (Groq or Claude, whichever key is set), grounded in a context
+built from live account data: the
 campaign, its tracking, audiences and their sizes, every strategy's targeting, bidding,
 creatives and delivery estimate, publish validation issues, open recommendations and the last
 14 days of results.
@@ -93,25 +94,43 @@ results) must come from <context>. If something isn't there, say you can't see i
 - "tracking.pixel" is "none" when no pixel is installed. Web audiences (visitors, leads, \
 purchasers) only fill from a pixel, so without one there is nothing to retarget: say so and \
 point them to prospecting (interests, demographics, location) instead.
+- "Audiences" means the advertiser's saved audiences (website visitors, customer lists). They \
+are separate from a strategy's interest and demographic filters, which narrow who sees the ad. \
+For any question about who to target, start with what saved audiences exist: if \
+"audiences.usable" is empty, say there are no audiences to retarget yet (and, if the pixel is \
+"none", that installing it is how web audiences get built), so the campaign should start with \
+prospecting. Then cover the strategy's current filters.
 - "audiences.usable" lists audiences with at least 1,000 households. Never describe an audience \
 as available, worth targeting or high intent unless it is in that list. Audiences in \
 "audiences.too_small" exist but are too small to target yet; say that plainly if they come up.
 - Money values are already formatted in US dollars. For manual bidding, compare the strategy's \
 max CPM with "inventory.median_cpm_floor" and "inventory.cheapest_cpm_floor": below the \
 cheapest floor it can win almost nothing; below the median it will under-deliver.
-- "validation_issues" are what currently blocks or weakens publishing; mention the ones \
-relevant to the question.
+- Each strategy's "estimate" is the reachable audience in households and its deliverability. \
+If deliverability is "limited" or "insufficient", or several interest and demographic filters \
+are stacked, say the targeting is narrow, quote the household range, and suggest broadening it \
+(fewer interests, wider age or income bands) at least while the campaign is learning. Name \
+only interests and demographic values that appear in the context; don't invent new ones.
+- If a manual max CPM is below the floors, say so with both numbers, then recommend automatic \
+bidding or a max CPM of at least the strategy's estimate.expected_cpm, and offer to make that \
+change.
+- "validation_issues" are what currently blocks or weakens publishing. When reviewing a draft, \
+briefly mention the other gaps there too (no creative, missing tracking), even if not asked.
+- placement.mode "selected" with channels_selected 0 means no channels are chosen yet.
 - "metrics_last_14_days" are real delivered results; zeros mean nothing has delivered yet. \
 Don't invent benchmarks or results. General advice about how CTV works is fine when it is \
 clearly general, not a claim about their account.
 
 How to answer:
-- At most about 180 words. Use 2-3 short sections, each starting with a **bold** header on its \
+- At most about 220 words. Use 2-3 short sections, each starting with a **bold** header on its \
 own line. Plain lines and "- " bullets only: no tables, no # headings.
 - Be direct. Lead with the answer to the question that was asked.
+- Talk in product terms, never the context's field names (say "saved audiences", not \
+"audiences.usable").
 - End with one concrete next step, phrased as an offer.
-- If they ask for, or agree to, a change you can express with the propose_change tool, call it. \
-The change is shown to them as a proposal they apply themselves; say that it's ready to review. \
+- Always answer the question in text. Suggest changes in words and offer to make them; call \
+the propose_change tool only when they explicitly ask you to make a change or say yes to your \
+offer. The change is shown to them as a proposal they apply themselves. \
 When you use a tool, you may say a brief sentence first. If no tool can express what they \
 asked for, tell them where in the product to make the change instead.
 - Do not include internal or system XML tags in your response.
@@ -225,6 +244,7 @@ async def _strategy(db: AsyncSession, s: Strategy, goal: CampaignGoal, audiences
                   "end": s.end_date.isoformat() if s.end_date else None},
         "bidding": bidding,
         "placement": {"mode": s.placement_mode.value, "channels": list(channels),
+                      "channels_selected": len(s.channel_ids or []) if s.placement_mode.value == "selected" else None,
                       "devices": list(s.device_types or []), "live_sports_only": s.live_sports_only},
         "locations": s.locations or {},
         "dayparting": (s.dayparting or {}).get("preset", "any"),
@@ -260,7 +280,8 @@ async def _metrics(db: AsyncSession, campaign_id: uuid.UUID) -> dict:
         "purchases": purchases, "installs": installs, "revenue": _usd(revenue),
         "cpm": _usd(spend * 1000 / imps) if imps else None,
         "roas": round(revenue / spend, 2) if spend else None,
-        "by_day": [{"date": r[0].isoformat(), "impressions": int(r[1]), "spend": _usd(int(r[2]))} for r in rows],
+        "by_day": [{"date": r[0].isoformat(), "impressions": int(r[1]), "spend": _usd(int(r[2]))}
+                   for r in rows if int(r[1])],
     }
 
 
@@ -321,7 +342,7 @@ async def build_context(db: AsyncSession, account_id: uuid.UUID, ctx: dict) -> d
     return out
 
 
-# ── Claude ─────────────────────────────────────────────────────────────────────
+# ── LLM providers ─────────────────────────────────────────────────────────────────────
 _anthropic_client = None
 
 
@@ -334,10 +355,15 @@ def _client():
     return _anthropic_client
 
 
+def _context_block(context: dict) -> str:
+    # Compact: Groq's free tier allows ~8k tokens a minute, so every token of context counts.
+    return f"<context>\n{json.dumps(context, default=str, separators=(',', ':'))}\n</context>"
+
+
 def _messages(history: list[dict], context: dict, question: str) -> list[dict]:
     msgs = [{"role": m["role"], "content": m["text"]} for m in history if m.get("text")]
     msgs.append({"role": "user", "content": [
-        {"type": "text", "text": f"<context>\n{json.dumps(context, default=str)}\n</context>"},
+        {"type": "text", "text": _context_block(context)},
         {"type": "text", "text": question},
     ]})
     return msgs
@@ -399,18 +425,91 @@ async def anthropic_answer(question: str, context: dict, history: list[dict]) ->
     return text, proposal
 
 
+GROQ_TOOLS = [{"type": "function", "function": {
+    "name": PROPOSE_CHANGE_TOOL["name"], "description": PROPOSE_CHANGE_TOOL["description"],
+    "parameters": PROPOSE_CHANGE_TOOL["input_schema"]}}]
+_groq = None
+
+
+def _groq_key() -> str | None:
+    if settings.groq_api_key:
+        return settings.groq_api_key
+    # A Groq key (gsk_…) pasted into ANTHROPIC_API_KEY would be rejected by Anthropic; use it where it works.
+    if (settings.anthropic_api_key or "").startswith("gsk_"):
+        return settings.anthropic_api_key
+    return None
+
+
+def _groq_client():
+    global _groq
+    if _groq is None:
+        from groq import AsyncGroq
+
+        _groq = AsyncGroq(api_key=_groq_key(), timeout=45.0, max_retries=1)
+    return _groq
+
+
+def provider() -> str | None:
+    if settings.anthropic_api_key and not settings.anthropic_api_key.startswith("gsk_"):
+        return "anthropic"
+    if _groq_key():
+        return "groq"
+    return None
+
+
+async def groq_answer(question: str, context: dict, history: list[dict]) -> tuple[str, dict | None]:
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+    msgs += [{"role": m["role"], "content": m["text"]} for m in history if m.get("text")]
+    msgs.append({"role": "user", "content": f"{_context_block(context)}\n\n{question}"})
+    create = _groq_client().chat.completions.create
+    common = {"model": settings.groq_model, "tools": GROQ_TOOLS, "reasoning_effort": settings.agent_effort,
+              "max_completion_tokens": 4096}
+    resp = await create(messages=msgs, tool_choice="auto", **common)
+    choice = resp.choices[0]
+    proposal = None
+    results = []
+    for call in choice.message.tool_calls or []:
+        found = None
+        if call.function.name == "propose_change":
+            try:
+                found = _proposal(json.loads(call.function.arguments or "{}"), context)
+            except ValueError:
+                found = None
+        proposal = found or proposal
+        results.append({"role": "tool", "tool_call_id": call.id, "content": (
+            f"Shown to the user as a proposal to review and apply: {found['diff']}" if found
+            else "Not proposed: it didn't match a strategy in the context or had nothing to change.")})
+    text = (choice.message.content or "").strip()
+    if results and not text:
+        # gpt-oss tends to answer with only the tool call; hand back the result so it explains itself.
+        msgs.append({"role": "assistant", "content": None, "tool_calls": [
+            {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}}
+            for c in choice.message.tool_calls]})
+        msgs += results
+        resp = await create(messages=msgs, tool_choice="none", **common)
+        choice = resp.choices[0]
+        text = (choice.message.content or "").strip()
+    if not text and proposal:
+        text = "I've prepared that change. Review it below and click **Apply** if it looks right."
+    if not text:
+        raise RuntimeError(f"empty answer (finish_reason={choice.finish_reason})")
+    return text, proposal
+
+
 async def answer(db: AsyncSession, account_id: uuid.UUID, context: dict, question: str,
                  history: list[dict] | None = None) -> dict:
     """Returns {"text", "proposal", "help"}. "help" is non-empty only when the agent is unavailable."""
-    if settings.anthropic_api_key:
+    which = provider()
+    if which:
         try:
             live = await build_context(db, account_id, context)
-            text, proposal = await anthropic_answer(question, live, history or [])
+            call = anthropic_answer if which == "anthropic" else groq_answer
+            text, proposal = await call(question, live, history or [])
             return {"text": text, "proposal": proposal, "help": []}
         except Exception:  # noqa: BLE001 — any failure shows the notice, never canned facts
-            log.exception("agent: Claude call failed")
+            log.exception("agent: %s call failed", which)
     return {"text": UNAVAILABLE, "proposal": None, "help": help_for(question, context.get("section"))}
 
 
 def configured() -> bool:
-    return bool(settings.anthropic_api_key)
+    return provider() is not None

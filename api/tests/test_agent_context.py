@@ -271,3 +271,90 @@ def test_apply_ignores_fields_outside_the_allow_list(client):
     s = asyncio.run(read())
     assert s.budget_micros == 70_000_000
     assert s.name != "renamed"
+
+
+# ── Groq (free tier) ───────────────────────────────────────────────────────────
+class FakeGroq:
+    def __init__(self, *responses):
+        self.calls: list[dict] = []
+        self._responses = list(responses)
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    async def _create(self, **kwargs):
+        self.calls.append(kwargs)
+        r = self._responses.pop(0) if self._responses else _g_text("OK")
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def _g_text(t):
+    return SimpleNamespace(choices=[SimpleNamespace(
+        finish_reason="stop", message=SimpleNamespace(content=t, tool_calls=None))])
+
+
+def _g_tool(name, args, preface=None):
+    call = SimpleNamespace(id="call_1", type="function",
+                           function=SimpleNamespace(name=name, arguments=json.dumps(args)))
+    return SimpleNamespace(choices=[SimpleNamespace(
+        finish_reason="tool_calls", message=SimpleNamespace(content=preface, tool_calls=[call]))])
+
+
+@pytest.fixture()
+def groq(monkeypatch):
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "groq_api_key", "gsk_test")
+    fake = FakeGroq()
+    monkeypatch.setattr(agent, "_groq_client", lambda: fake)
+    return fake
+
+
+def test_groq_request_carries_live_context(client, groq):
+    groq._responses = [_g_text("**Short answer**\nYour max CPM is $3.00.")]
+    h, cid, _ = _draft(client, "groq@acme.io")
+    assert client.get("/api/v1/agent/config", headers=h).json()["configured"] is True
+    _, r = _ask(client, h, cid, "what is my max CPM and is it too low?")
+    assert r["answer"].startswith("**Short answer**") and r["help"] == []
+
+    (call,) = groq.calls
+    assert call["model"] == "openai/gpt-oss-120b"
+    assert call["reasoning_effort"] in {"low", "medium", "high"}
+    assert call["tools"][0]["function"]["name"] == "propose_change"
+    assert call["messages"][0] == {"role": "system", "content": agent.SYSTEM_PROMPT}
+    last = call["messages"][-1]
+    assert last["role"] == "user" and "what is my max CPM and is it too low?" in last["content"]
+    ctx = json.loads(last["content"].split("<context>")[1].split("</context>")[0])
+    assert ctx["strategies"][0]["bidding"]["max_cpm"] == "$3.00"
+    assert ctx["inventory"]["cheapest_cpm_floor"] == "$8.00"
+    assert ctx["tracking"]["pixel"] == "none"
+
+
+def test_groq_tool_call_becomes_a_proposal(client, groq):
+    h, cid, sid = _draft(client, "groqprop@acme.io")
+    groq._responses = [_g_tool("propose_change", {"op": "update_strategy", "strategy_id": sid,
+                                                  "bidding_mode": "automatic"})]
+    groq._responses.append(_g_text("Switching to automatic bidding lets you win at market prices."))
+    _, r = _ask(client, h, cid, "switch me to automatic bidding")
+    assert r["proposal"] is not None and "automatic" in r["proposal"]["diff"]
+    # the model sent only the tool call, so the result went back and it explained the change
+    assert r["answer"] == "Switching to automatic bidding lets you win at market prices."
+    second = groq.calls[1]
+    assert second["tool_choice"] == "none"
+    assert second["messages"][-1]["role"] == "tool" and "automatic" in second["messages"][-1]["content"]
+
+
+def test_groq_failure_shows_the_notice(client, groq):
+    groq._responses = [RuntimeError("429 rate limit")]
+    h, cid, _ = _draft(client, "groqdown@acme.io")
+    _, r = _ask(client, h, cid, "What audience should I target?")
+    assert "isn't available" in r["answer"] and r["help"]
+
+
+def test_groq_key_in_the_anthropic_variable_is_routed_to_groq(client, monkeypatch):
+    monkeypatch.setattr(settings, "groq_api_key", None)
+    monkeypatch.setattr(settings, "anthropic_api_key", "gsk_misplaced")
+    fake = FakeGroq(_g_text("Routed to Groq."))
+    monkeypatch.setattr(agent, "_groq_client", lambda: fake)
+    h, cid, _ = _draft(client, "misplaced@acme.io")
+    _, r = _ask(client, h, cid, "hi")
+    assert r["answer"] == "Routed to Groq." and len(fake.calls) == 1

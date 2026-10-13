@@ -189,3 +189,33 @@ stack and marked `staging: pending`.
 - **Owner action:** run `seed-demo` on production first, then
   `python -m app.cli cleanup` with `DATABASE_URL` pointed at Neon, read the list, and re-run with
   `--apply`. Taking a Neon branch/snapshot first makes it undoable.
+
+### P0-2 addendum — Groq provider; the owner's pass/fail check run against the real model
+- The re-check on the deployed app still showed canned answers because the deployed build predates
+  P0-2 (not pushed yet). The owner also put a Groq key in `ANTHROPIC_API_KEY`, which Anthropic would
+  reject.
+- Change: the agent runs on Groq (`GROQ_API_KEY`, `openai/gpt-oss-120b`, the model `backend/` already
+  uses) or Anthropic, whichever key is set. A `gsk_` key found in `ANTHROPIC_API_KEY` is used with Groq.
+  Context JSON is compact (~490 tokens for the check draft). gpt-oss tended to answer with only a tool
+  call, so the tool result is sent back once for a written answer. The prompt now separates saved
+  audiences from interest/demographic filters, requires prospecting advice when there are none,
+  covers narrow targeting, floors vs. expected CPM, other draft gaps, and forbids invented values
+  and proposing changes the user didn't ask for.
+- Real-model run (local stack, owner's Groq key; draft: Golf + female + 18-24 + $500k+, manual $3,
+  no pixel, no creative, 0 channels selected), 3 runs:
+  - Audience: says there are no saved audiences and no pixel so start with prospecting, quotes
+    127k-191k households, suggests broadening gender/age/income while learning, mentions the $3 CPM
+    and missing creative, offers the change.
+  - Max CPM: states $3.00, below $13.82 cheapest / $23.92 median floor, recommends automatic bidding
+    or about $26.64, offers the change.
+  - "yes, switch it to automatic bidding": a proposal (manual -> automatic) with an explanation.
+  - Not covered: it never mentioned "0 channels selected". Placement "selected" with no channels
+    isn't a validation issue today (the estimator treats it as all channels); left for Phase 1.
+  - "Soft preferences" isn't offered: `strategies.suggestions_enabled` is stored but nothing in the
+    UI or estimator uses it, so the agent recommends broadening filters instead.
+- Free-tier limit: ~8k tokens/minute per Groq account (shared with `backend/` if it uses the same
+  account). Answers took 1-3 s; back-to-back questions took 18-31 s while the client waited out the limit.
+- Tests: Groq request shape, tool call -> proposal with a second call for the text, failure notice,
+  misplaced key routed to Groq. 110 API tests pass.
+- **Owner action:** on Render set `GROQ_API_KEY` (move the key out of `ANTHROPIC_API_KEY`), then push
+  and redeploy the branch; the re-check needs the new build.

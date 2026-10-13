@@ -81,7 +81,10 @@ class Settings(BaseSettings):
     jwt_access_ttl_minutes: int = 15
     jwt_refresh_ttl_days: int = 30
 
-    # LLM for Ask Agent. Without a key the agent says it is unavailable and links help articles.
+    # LLM for Ask Agent: Groq (free tier) or Anthropic, whichever key is set (Anthropic wins if both).
+    # Without a key the agent says it is unavailable and links help articles.
+    groq_api_key: str | None = None
+    groq_model: str = "openai/gpt-oss-120b"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-5-5"
     agent_effort: str = "medium"  # low | medium | high — higher is slower and more thorough
