@@ -9,9 +9,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StatusPill } from "@/components/app/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { api } from "@/lib/api/client";
+import { ACTION_TIMEOUT_MS, api } from "@/lib/api/client";
 import { goalDef } from "@/lib/campaign-config";
-import { type CampaignDetail, type Creative, type Estimate, type Strategy } from "@/lib/hooks";
+import { type CampaignDetail, type Creative, type Estimate, type Strategy, errorMessage } from "@/lib/hooks";
 import { nfCompact, usd } from "@/lib/utils";
 
 type Loc = { type: string; code: string; name?: string };
@@ -30,6 +30,9 @@ export default function WizardPage() {
   const [step, setStep] = useState(1);
   const [strat, setStrat] = useState<Strategy | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
+  // A failed update must be visible: silently keeping the old numbers looked like a valid estimate.
+  const [estimateError, setEstimateError] = useState<string | null>(null);
+  const estSeq = useRef(0); // ignore responses that a newer request superseded
   const [saving, setSaving] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const estTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,7 +57,9 @@ export default function WizardPage() {
     (s: Strategy, goal: string) => {
       if (estTimer.current) clearTimeout(estTimer.current);
       estTimer.current = setTimeout(async () => {
-        const { data } = await api.POST("/api/v1/estimate", {
+        const seq = ++estSeq.current;
+        try {
+        const { data, error } = await api.POST("/api/v1/estimate", {
           body: {
             goal: goal as never,
             strategy: {
@@ -65,8 +70,18 @@ export default function WizardPage() {
               device_types: s.device_types, bidding_mode: s.bidding_mode, max_cpm_micros: s.max_cpm_micros,
             } as never,
           },
+          signal: AbortSignal.timeout(ACTION_TIMEOUT_MS),
         });
-        if (data) setEstimate(data as Estimate);
+        if (seq !== estSeq.current) return;
+        if (error || !data) {
+          setEstimateError(errorMessage(error, "Couldn't update estimate."));
+          return;
+        }
+        setEstimate(data as Estimate);
+        setEstimateError(null);
+        } catch {
+          if (seq === estSeq.current) setEstimateError("Couldn't update estimate. Check your connection and try again.");
+        }
       }, 400);
     },
     [],
@@ -146,8 +161,19 @@ export default function WizardPage() {
         <aside className="col-span-12 lg:col-span-3">
           <div className="sticky top-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)]">
             <h3 className="text-sm font-semibold text-[var(--color-text)]">Strategy estimate</h3>
+            {estimateError && (
+              <div role="alert" id="estimate-error"
+                   className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[var(--color-danger-50)] p-3 text-xs text-[var(--color-danger)]">
+                <p className="font-medium">Couldn&apos;t update estimate</p>
+                {estimateError !== "Couldn't update estimate." && <p className="mt-1">{estimateError}</p>}
+                <button className="mt-2 font-medium underline" onClick={() => strat && campaign && runEstimate(strat, campaign.goal)}>
+                  Try again
+                </button>
+              </div>
+            )}
             {estimate ? (
-              <div className="mt-4 space-y-3 text-sm">
+              <div className={`mt-4 space-y-3 text-sm ${estimateError ? "opacity-50" : ""}`} aria-busy={!!estimateError}
+                   title={estimateError ? "Out of date — the last update failed" : undefined}>
                 <div>
                   <div className="text-xs text-[var(--color-text-muted)]">Audience size</div>
                   <div className="font-semibold tabular-nums text-[var(--color-text)]">

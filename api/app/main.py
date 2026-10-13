@@ -11,7 +11,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 
 from app.core.config import settings
 from app.core.deps import require_non_production
-from app.core.errors import install_error_handlers
+from app.core.errors import UnhandledErrorMiddleware, install_error_handlers
 from app.routers import (
     accounts,
     advertisers,
@@ -55,6 +55,9 @@ async def openapi_json():
 async def swagger_ui():
     return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{settings.product_name} API")
 
+# Order matters: the last middleware added is the outermost. The error net is added first so
+# CORSMiddleware wraps it and error responses still carry CORS headers.
+app.add_middleware(UnhandledErrorMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

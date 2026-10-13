@@ -141,7 +141,9 @@ async def _eligible_sample(db: AsyncSession, strategy: dict) -> int:
 
 async def _placement(db: AsyncSession, strategy: dict) -> tuple[float, int]:
     """Return (placement_share, avg_cpm_micros)."""
-    total_reach = (await db.execute(select(func.coalesce(func.sum(Channel.reach_households), 0)))).scalar_one()
+    # SUM() over bigint comes back as Decimal; keep everything downstream in float/int
+    # (Decimal * float raised TypeError whenever channels were selected).
+    total_reach = float((await db.execute(select(func.coalesce(func.sum(Channel.reach_households), 0)))).scalar_one())
     if strategy.get("placement_mode") == "selected" and strategy.get("channel_ids"):
         rows = (
             await db.execute(
@@ -150,7 +152,7 @@ async def _placement(db: AsyncSession, strategy: dict) -> tuple[float, int]:
                 )
             )
         ).all()
-        sel_reach = sum(r[0] for r in rows) or 1
+        sel_reach = float(sum(r[0] for r in rows)) or 1.0
         share = min(1.0, sel_reach / total_reach) if total_reach else 1.0
         wcpm = sum(r[0] * r[1] for r in rows) / sel_reach if rows else DEFAULT_CPM_MICROS
         return share, int(wcpm)

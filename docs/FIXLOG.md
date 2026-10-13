@@ -26,3 +26,18 @@ stack and marked `staging: pending`.
   gives exactly "Spring Sale" in the wizard header and the campaigns list; blank falls back.
   Failed before the fix with `You are creating… / Untitled campaignSpring Sale`.
 - Existing bad names in production data are cleaned in P0-9. Staging: pending.
+
+### P0-3 Estimate fails whenever specific channels are selected — fixed
+- Root cause: `_placement()` divided by Postgres `SUM()` results, which arrive as `Decimal`; the share
+  became a Decimal and `float * Decimal` raised `TypeError` in `compute_estimate`. The all-channels path
+  returned a literal `1.0`, so only selected channels broke. The 500 then left Starlette's outermost
+  layer as plain text **outside** CORSMiddleware, so the browser saw only "Failed to fetch".
+- Fix: channel sums converted to float. New `UnhandledErrorMiddleware` installed *inside* CORS turns any
+  unhandled exception into the JSON envelope (`INTERNAL_ERROR`, generic message; details logged, never
+  sent). Wizard estimate panel now shows "Couldn't update estimate" + Try again, dims stale numbers,
+  and ignores out-of-order responses.
+- Tests: `api/tests/test_estimate_channels.py` (1 small / 1 large / 20 channels each < all; unhandled
+  error → 500 JSON with CORS header, no internals), `web/e2e/estimate-panel.spec.ts` (server error and
+  network failure shown; Try again recovers). All failed before the fix.
+- Real-data check (563 seeded channels): all 112.3M; largest channel 15.2M; 20 channels 476K;
+  smallest 3,953 — all HTTP 200. Staging: pending.
