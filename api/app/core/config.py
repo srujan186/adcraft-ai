@@ -81,8 +81,10 @@ class Settings(BaseSettings):
     jwt_access_ttl_minutes: int = 15
     jwt_refresh_ttl_days: int = 30
 
-    # LLM (optional — agent is disabled with a friendly message when absent)
+    # LLM for Ask Agent. Without a key the agent says it is unavailable and links help articles.
     anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-opus-5-5"
+    agent_effort: str = "medium"  # low | medium | high — higher is slower and more thorough
 
     # Delivery (stand-in for a live ad server). SIM_SPEED = simulated minutes per real minute.
     # 1 (default) keeps spend and dates realistic: a $50/day strategy spends ~$50 per real day.

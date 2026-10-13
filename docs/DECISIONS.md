@@ -16,3 +16,6 @@ Where the fix plan was silent, the simplest option was taken and recorded here
 2026-10-13 — Demo login defaults to `demo@adcraft-demo.com` (never emailed; reserved TLDs like `.example` are rejected by the login validator). Password is chosen at seed time.
 2026-10-13 — Attribution and rollups rewritten as single `INSERT … SELECT` statements (proven equal to the originals by tests) because the per-row Python versions were too slow to run on every tick on a 0.1-CPU host.
 2026-10-13 — Seeded channels that imitated real brands are renamed by an Alembic data migration (in place, ids kept) rather than a re-seed, which would regenerate households and orphan existing delivery data.
+2026-10-13 — Ask Agent uses `claude-opus-5-5` at `medium` effort, non-streaming (the panel takes one JSON reply). `AGENT_EFFORT=low` trades depth for speed if replies feel slow.
+2026-10-13 — When the agent can't reach the LLM, it shows the "unavailable" notice and help links rather than any templated advice — a template can't see the account, and the old one stated facts that were false for most users.
+2026-10-13 — Agent proposals are limited to budget, max CPM, bidding mode and duplicating a strategy; anything else gets pointed to the right screen. `apply` enforces the same allow-list server-side.

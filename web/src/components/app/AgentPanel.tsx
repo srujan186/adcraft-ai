@@ -2,6 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { Send, Sparkles, X } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useRef, useState } from "react";
 
@@ -9,7 +10,13 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import { agentStore, useAgentOpen } from "@/lib/agentStore";
 
-interface Msg { role: "user" | "assistant"; text: string; proposal?: { id: string; diff: string | null } | null }
+interface HelpLink { title: string; href: string }
+interface Msg {
+  role: "user" | "assistant";
+  text: string;
+  proposal?: { id: string; diff: string | null } | null;
+  help?: HelpLink[];
+}
 
 function renderRich(text: string) {
   return text.split("\n").map((line, i) => (
@@ -59,8 +66,13 @@ export function AgentPanel() {
       params: { path: { thread_id: id } }, body: { message: text },
     });
     setBusy(false);
-    const r = data as { answer: string; proposal: { id: string; diff: string | null } | null };
-    setMsgs((m) => [...m, { role: "assistant", text: r.answer, proposal: r.proposal }]);
+    const r = data as { answer: string; proposal: Msg["proposal"]; help?: HelpLink[] } | undefined;
+    setMsgs((m) => [
+      ...m,
+      r
+        ? { role: "assistant", text: r.answer, proposal: r.proposal, help: r.help }
+        : { role: "assistant", text: "That message didn't go through. Check your connection and try again." },
+    ]);
   }
 
   async function applyProposal(pid: string) {
@@ -95,6 +107,17 @@ export function AgentPanel() {
               <div key={i} className={m.role === "user" ? "flex justify-end" : ""}>
                 <div className={`max-w-[90%] rounded-[var(--radius-lg)] px-3 py-2 text-sm ${m.role === "user" ? "bg-[var(--color-primary)] text-white" : "bg-[var(--color-bg-subtle)] text-[var(--color-text-body)]"}`}>
                   {m.role === "assistant" ? renderRich(m.text) : m.text}
+                  {m.help && m.help.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {m.help.map((h) => (
+                        <li key={h.href}>
+                          <Link href={h.href} target="_blank" className="font-medium text-[var(--color-primary)] underline-offset-2 hover:underline">
+                            {h.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {m.proposal && (
                     <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-primary)] bg-[var(--color-surface)] p-2 text-[var(--color-text-body)]">
                       <div className="text-xs">{m.proposal.diff}</div>

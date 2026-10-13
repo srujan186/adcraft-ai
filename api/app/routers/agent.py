@@ -1,22 +1,28 @@
 """Ask Agent endpoints (account-scoped). Messages return JSON (SSE is the prod transport)."""
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.deps import Tenant, get_current_account, require_roles
 from app.core.errors import AppError
 from app.models.agent import AgentMessage, AgentProposal, AgentThread, ProposalStatus
-from app.models.campaign import Strategy
+from app.models.campaign import BiddingMode, Strategy
 from app.models.identity import Role
 from app.services.agent import answer, configured, suggested_questions
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 _EDIT = require_roles(Role.owner, Role.admin, Role.member)
+HISTORY_TURNS = 12
+# The only strategy fields a proposal may change. The agent's tool can only express these, and
+# apply re-checks so a stored action can never write ownership or other columns.
+_STRATEGY_PATCH = {"budget_micros": int, "max_cpm_micros": int, "bidding_mode": BiddingMode}
 
 
 class ThreadCreate(BaseModel):
@@ -52,9 +58,17 @@ async def post_message(thread_id: uuid.UUID, body: MessageCreate, tenant: Tenant
     if thread is None or thread.account_id != tenant.account.id:
         raise AppError("NOT_FOUND", "Thread not found", 404)
 
-    db.add(AgentMessage(thread_id=thread.id, role="user", content={"text": body.message}))
-    text, proposal_action = await answer(db, tenant.account.id, thread.context or {}, body.message)
-    db.add(AgentMessage(thread_id=thread.id, role="assistant", content={"text": text}))
+    prior = (await db.execute(
+        select(AgentMessage).where(AgentMessage.thread_id == thread.id)
+        .order_by(AgentMessage.created_at.desc()).limit(HISTORY_TURNS))).scalars().all()
+    history = [{"role": m.role, "text": (m.content or {}).get("text")} for m in reversed(prior)]
+    # Stamped here: server_default now() is per-transaction, so both turns would tie on sort order.
+    db.add(AgentMessage(thread_id=thread.id, role="user", content={"text": body.message},
+                        created_at=dt.datetime.now(dt.timezone.utc)))
+    result = await answer(db, tenant.account.id, thread.context or {}, body.message, history)
+    text, proposal_action = result["text"], result["proposal"]
+    db.add(AgentMessage(thread_id=thread.id, role="assistant", content={"text": text},
+                        created_at=dt.datetime.now(dt.timezone.utc)))
 
     proposal_out = None
     if proposal_action:
@@ -66,7 +80,7 @@ async def post_message(thread_id: uuid.UUID, body: MessageCreate, tenant: Tenant
         await db.flush()
         proposal_out = {"id": str(prop.id), "diff": prop.diff, "status": prop.status.value}
     await db.commit()
-    return {"answer": text, "proposal": proposal_out}
+    return {"answer": text, "proposal": proposal_out, "help": result["help"]}
 
 
 @router.post("/proposals/{proposal_id}/apply")
@@ -86,13 +100,12 @@ async def apply_proposal(proposal_id: uuid.UUID, tenant: Tenant = Depends(_EDIT)
                 placement_mode=src.placement_mode, device_types=list(src.device_types or ["tv"]),
                 bidding_mode=src.bidding_mode, position=src.position + 1,
             ))
-    elif op in ("update_strategy", "update_campaign"):
-        from app.models.campaign import Campaign
-
-        target = await db.get(Strategy if op == "update_strategy" else Campaign, action["id"])
-        if target is not None and getattr(target, "account_id", None) == tenant.account.id:
+    elif op == "update_strategy":
+        target = await db.get(Strategy, action["id"])
+        if target is not None and target.account_id == tenant.account.id:
             for k, v in (action.get("patch") or {}).items():
-                setattr(target, k, v)
+                if k in _STRATEGY_PATCH and v is not None:
+                    setattr(target, k, _STRATEGY_PATCH[k](v))
     prop.status = ProposalStatus.applied
     await db.commit()
     return {"id": str(prop.id), "status": prop.status.value}

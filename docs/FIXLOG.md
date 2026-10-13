@@ -141,3 +141,36 @@ stack and marked `staging: pending`.
   renames them in place in existing databases (ids kept — verified on the local DB).
 - Test: `api/tests/test_seed_brands.py` checks seeded channel names and the filler word lists against a
   list of real media brands (failed on the old names).
+
+### P0-2 — agent ignored the account and stated false facts — fixed (real-LLM check pending the key)
+- Root cause: (1) the `anthropic` package was not installed or listed in `api/requirements.txt`, so the
+  LLM path raised `ModuleNotFoundError` every time; (2) `answer()` swallowed that and fell back to a
+  canned reply that told every user their "Visitors, Leads and Purchasers web audiences are your
+  highest-intent viewers", with no pixel and no audiences; (3) even with the package, the context held
+  only goal/KPI/window and two booleans, and the sync client ran inside async code with 1,024 tokens.
+- Fix:
+  - `services/agent.py` builds the context from live data: campaign (status, goal, KPI, target, window),
+    pixel/app status and events seen in 7 days, every audience with its household count split into
+    `usable` (≥ 1,000) and `too_small`, each strategy's budget, dates, bidding and max CPM, placement and
+    channels, devices, locations, dayparting, interests, demographics, included/excluded audiences,
+    creatives with review status, and its estimate; inventory median and cheapest CPM floors; publish
+    validation issues; open recommendations; 14 days of delivered metrics.
+  - Claude via `AsyncAnthropic`: `claude-opus-5-5`, adaptive thinking, `effort` from `AGENT_EFFORT`
+    (medium), server-side fallbacks, refusal handled, constant system prompt (rules incl. the
+    1,000-household rule), context in the user turn, last 12 messages of the thread as history.
+  - No key, or any LLM error: "The assistant isn't available right now…" plus up to 3 help-centre
+    links matched to the question. No facts, no proposals.
+  - Proposals come from a `propose_change` tool (budget, max CPM, bidding mode, duplicate strategy), are
+    checked against the context's strategy ids, and `apply` only writes those three strategy fields.
+    Before, apply did `setattr` for any key in the stored patch (a planted `account_id` reached the DB).
+  - Ask Agent panel renders the help links and no longer crashes when a send fails.
+- Tests: `api/tests/test_agent_context.py` (plan draft: no pixel, no creative, no audiences, manual $3
+  CPM → context says pixel none, no usable audiences, `$3.00` vs `$19.00` median floor, the three
+  validation codes; sub-1,000 audiences not usable; other accounts' campaigns ignored; no-key and
+  error paths state no facts; request shape; history; refusal; proposals and the apply allow-list),
+  `api/tests/test_agent.py` (help slugs match `web/src/content/help.ts`), `web/e2e/agent-unavailable.spec.ts`.
+  The old canned-answer rubric test was removed with the canned answer.
+- Not verified: the two plan questions against the real model — no key is available locally and real
+  calls cost money. **Owner action:** set `ANTHROPIC_API_KEY` on the API service (optional
+  `ANTHROPIC_MODEL`, `AGENT_EFFORT`), redeploy (new dependency), then on staging ask the plan's draft
+  "what audience should I target?" and "what is my max CPM and is it too low?".
