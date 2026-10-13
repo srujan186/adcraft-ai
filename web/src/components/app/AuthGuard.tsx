@@ -19,9 +19,10 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   }, [router]);
 
   if (!ok) {
+    // Only lasts until the session check runs after hydration: show the app's frame, no text.
     return (
-      <div className="grid min-h-screen place-items-center text-sm text-[var(--color-text-muted)]">
-        Loading…
+      <div className="min-h-screen" aria-busy="true">
+        <div className="h-14" style={{ background: "var(--color-nav)" }} />
       </div>
     );
   }

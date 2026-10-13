@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { StatusPill } from "@/components/app/StatusPill";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input, Select } from "@/components/ui/input";
 import { ACTION_TIMEOUT_MS, api } from "@/lib/api/client";
 import { goalDef } from "@/lib/campaign-config";
@@ -108,7 +109,7 @@ export default function WizardPage() {
   };
 
   if (!campaign || !strat) {
-    return <div className="grid min-h-[60vh] place-items-center text-sm text-[var(--color-text-muted)]">Loading…</div>;
+    return <div className="space-y-4 px-8 py-8" aria-busy="true" aria-label="Loading campaign"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /><Skeleton className="h-64 w-full" /></div>;
   }
 
   return (

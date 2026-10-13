@@ -4,6 +4,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { logout, useMe } from "@/lib/hooks";
 
 const MENU: { label: string; href: string }[] = [
@@ -15,7 +16,16 @@ const MENU: { label: string; href: string }[] = [
 
 export function AccountSwitcher() {
   const { data: me } = useMe();
-  const accountName = me?.active_account?.name ?? "Your account";
+  // Until the real account arrives show a skeleton — never a made-up name like "Your account".
+  if (!me?.active_account?.name) {
+    return (
+      <span className="flex items-center gap-2 px-2 py-1.5" aria-busy="true" aria-label="Loading account">
+        <Skeleton className="h-6 w-6 bg-white/15" name="account" />
+        <Skeleton className="h-3 w-24 bg-white/15" />
+      </span>
+    );
+  }
+  const accountName = me.active_account.name;
   const initial = accountName.charAt(0).toUpperCase();
 
   return (

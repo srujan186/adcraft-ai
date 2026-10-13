@@ -91,3 +91,19 @@ const auth: Middleware = {
 api.use(auth);
 
 export type { paths };
+
+
+/**
+ * Query retry policy. A sleeping free-tier server answers with a gateway error page (non-JSON),
+ * a 5xx, or no response at all while it wakes — retry those with backoff (1s, 2s, 4s, 8s).
+ * Our own JSON errors (401, 403, 404, 422…) are answers, not outages: never retry them.
+ */
+export function shouldRetry(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 4) return false;
+  if (error instanceof TypeError || error instanceof DOMException) return true; // network / timeout
+  if (typeof error === "string") return true; // HTML gateway page, not our API
+  const code = (error as { error?: { code?: string } } | null)?.error?.code;
+  return !code || code === "INTERNAL_ERROR";
+}
+
+export const retryDelay = (attempt: number) => Math.min(1000 * 2 ** attempt, 8000);

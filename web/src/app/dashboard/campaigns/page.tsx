@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatusPill } from "@/components/app/StatusPill";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api/client";
 import { goalDef } from "@/lib/campaign-config";
 import { type Campaign } from "@/lib/hooks";
@@ -46,7 +47,9 @@ export default function CampaignsPage() {
       />
       <div className="px-8 py-8">
         {isLoading ? (
-          <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+          <div className="space-y-3" aria-busy="true" aria-label="Loading campaigns">
+            {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-11 w-full" />)}
+          </div>
         ) : campaigns.length === 0 ? (
           <EmptyState title="No campaigns yet" description="Create your first streaming-TV campaign to start reaching households."
             action={<Button asChild><Link href="/dashboard/campaigns/new">Create campaign</Link></Button>} />

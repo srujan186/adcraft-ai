@@ -48,7 +48,9 @@ export function useMe() {
       if (error) throw error;
       return data as Me;
     },
-    retry: false,
+    // Loaded once and shared by every component (React Query dedupes); the user and account
+    // rarely change mid-session. Retries follow the app-wide policy (server waking up).
+    staleTime: 5 * 60_000,
   });
 }
 

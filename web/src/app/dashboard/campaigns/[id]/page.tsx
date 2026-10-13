@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { StatusPill } from "@/components/app/StatusPill";
 import { TrendChart } from "@/components/app/TrendChart";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
 import { goalDef } from "@/lib/campaign-config";
@@ -84,7 +85,7 @@ export default function CampaignDetailPage() {
     },
   });
 
-  if (!campaign) return <div className="grid min-h-[50vh] place-items-center text-sm text-[var(--color-text-muted)]">Loading…</div>;
+  if (!campaign) return <div className="space-y-4 px-8 py-8" aria-busy="true" aria-label="Loading campaign"><Skeleton className="h-8 w-64" /><Skeleton className="h-40 w-full" /><Skeleton className="h-64 w-full" /></div>;
 
   const fmt = METRICS.find((x) => x.key === metric)?.fmt ?? ((v: number) => nfCompact.format(v));
   const learning = campaign.status === "learning";

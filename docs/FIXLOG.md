@@ -73,3 +73,22 @@ stack and marked `staging: pending`.
   only functional identifiers remain — see `docs/DECISIONS.md`.
 - Note: `backend/` (video generator) prompt changed → needs a push to the HF Space when deploying.
 - Staging: pending.
+
+### P0-5 Slow first load and placeholder header — fixed (code); keep-warm is an infra action
+- Root cause: the account switcher rendered the invented name "Your account" until `/auth/me`
+  answered (10–20 s on a sleeping Render instance); `/auth/me` had `retry: false`, so a gateway error
+  while the server woke left the header blank until a manual reload; other queries retried once with
+  no backoff; several pages showed a bare "Loading…".
+- Fix: `Skeleton` component; account switcher shows a skeleton until the real account arrives; app-wide
+  retry policy (`shouldRetry`/`retryDelay` in `lib/api/client.ts`): network errors, non-JSON gateway pages
+  and `INTERNAL_ERROR` retry up to 4× with 1/2/4/8 s backoff, our own JSON errors (401/403/404/422) never;
+  `/auth/me` loaded once and shared (5 min staleTime, React Query dedupes); skeletons replace "Loading…"
+  on the auth gate, campaigns list, campaign page and wizard. Staying logged in on reload was fixed
+  earlier (cross-site refresh token, commit 8d5893f).
+- Tests: `web/e2e/loading.spec.ts` — slow `/auth/me` shows a skeleton and never "Your account"; two 503s
+  then success still loads the account; warm reload of Campaigns shows real data in < 3 s and stays on
+  the page. The first two failed before the fix. E2E config: 10 s assertion waits, 2 workers (on-demand
+  dev compiles made 5 s waits flaky).
+- **Owner action:** keep the API awake — UptimeRobot (free) HTTP monitor on
+  `https://<api>/api/v1/health` every 5 min, or a paid instance. Code cannot prevent the free tier sleeping.
+- Staging: pending.
