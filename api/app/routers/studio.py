@@ -1,6 +1,8 @@
 """AI Studio jobs: create (URL → creative) + poll (account-scoped)."""
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends
@@ -31,11 +33,40 @@ class StudioJobCreate(BaseModel):
     cta: str | None = None
 
 
+def _site(url: str) -> str:
+    """Host of a URL or bare domain, lowercased, without port or a leading "www."."""
+    u = url.strip()
+    host = (urlsplit(u if "://" in u else f"https://{u}").hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _owned_by(url: str, website: str) -> bool:
+    """True for the advertiser's own site or one of its subdomains — exact label match, so
+    look-alikes such as brand.example.evil.example or evilbrand.example don't pass."""
+    u, w = _site(url), _site(website)
+    return bool(u and w) and (u == w or u.endswith("." + w))
+
+
 @router.post("/jobs", status_code=201)
 async def create_job(body: StudioJobCreate, background: BackgroundTasks, tenant: Tenant = Depends(_EDIT), db: AsyncSession = Depends(get_db)):
     adv = await db.get(Advertiser, body.advertiser_id)
     if adv is None or adv.account_id != tenant.account.id:
         raise AppError("NOT_FOUND", "Advertiser not found", 404)
+    # Ads may only be made from the advertiser's own website, never someone else's brand.
+    if body.url and body.url.strip():
+        if not adv.website_url:
+            raise AppError(
+                "WEBSITE_REQUIRED",
+                f"Add {adv.name}'s website (Settings → Advertisers) before generating from a URL.",
+                422,
+            )
+        if not _owned_by(body.url, adv.website_url):
+            raise AppError(
+                "DOMAIN_MISMATCH",
+                f"Ads can only be made from {adv.name}'s own website ({_site(adv.website_url)}); "
+                f"{_site(body.url) or 'that address'} doesn't match.",
+                422,
+            )
     job = StudioJob(
         account_id=tenant.account.id, advertiser_id=body.advertiser_id,
         input={"url": body.url, "business_name": body.business_name or adv.name,

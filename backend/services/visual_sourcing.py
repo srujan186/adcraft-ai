@@ -3,7 +3,7 @@ Visual sourcing — deciding WHERE an ad's scenes come from, for any website.
 
 The old pipeline was "scrape homepage <img>, else screenshot", and each new
 kind of site broke it differently (a store worked; a dev-tool brought in
-founder faces and badges; a customer-showcase like stripe.com filled the ad
+founder faces and badges; a customer-showcase homepage filled the ad
 with its clients). Patching per site does not scale.
 
 This module separates the two concerns that were tangled together:
@@ -22,7 +22,7 @@ what order, using only signals the site provides about itself.
 
 Ownership is the signal that generalises the two old hacks. An image is a
 third party's (a customer, a partner logo) when the section it lives under reads
-like a case study — "Hertz unifies commerce with Stripe", "Trusted by…",
+like a case study — "<Customer> unifies commerce with <Vendor>", "Trusted by…",
 "Our customers" — rather than the company describing its own product. That is
 discovered from each site's own headings; it needs no list of brand names.
 """
@@ -287,7 +287,7 @@ def discover_nav_links(soup, base_url: str) -> dict:
 async def discover_sitemap_links(base_url: str) -> dict:
     """
     Product-ish pages from the site's own sitemap(s). This is what makes
-    discovery general: a mega-menu (Stripe) hides its nav links from the static
+    discovery general: a mega-menu hides its nav links from the static
     DOM, but almost every site publishes a sitemap that lists every page.
     """
     p = urlparse(base_url)

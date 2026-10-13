@@ -29,6 +29,53 @@ const INDUSTRIES: [string, string][] = [
   ["other", "Other"],
 ];
 
+/** Advertisers created without a website can add one here: Studio only generates ads from the
+ * advertiser's own site, so a missing website blocks "generate from URL". */
+function WebsiteCell({ advertiser }: { advertiser: Advertiser }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await api.PATCH("/api/v1/advertisers/{advertiser_id}", {
+        params: { path: { advertiser_id: String(advertiser.id) } },
+        body: { website_url: value.trim() },
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setEditing(false);
+      setError(null);
+      await qc.invalidateQueries({ queryKey: ["advertisers"] });
+    },
+    onError: (e) => setError(errorMessage(e, "Couldn't save the website.")),
+  });
+
+  if (advertiser.website_url) return <>{advertiser.website_url}</>;
+  if (!editing) {
+    return (
+      <button type="button" className="font-medium text-[var(--color-primary)]" onClick={() => setEditing(true)}>
+        Add website
+      </button>
+    );
+  }
+  return (
+    <form
+      className="flex items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (value.trim()) save.mutate();
+      }}
+    >
+      <Input aria-label={`Website for ${advertiser.name}`} placeholder="https://yourbusiness.com" value={value}
+             onChange={(e) => setValue(e.target.value)} autoFocus />
+      <Button type="submit" disabled={save.isPending || !value.trim()}>Save</Button>
+      {error && <span className="text-xs text-[var(--color-danger)]">{error}</span>}
+    </form>
+  );
+}
+
 export default function AdvertisersSettingsPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -137,7 +184,7 @@ export default function AdvertisersSettingsPage() {
                   <tr key={String(a.id)} className="border-t border-[var(--color-border)]">
                     <td className="px-4 py-3 font-medium text-[var(--color-text)]">{a.name}</td>
                     <td className="px-4 py-3 text-[var(--color-text-muted)]">{a.industry}</td>
-                    <td className="px-4 py-3 text-[var(--color-text-muted)]">{a.website_url ?? "—"}</td>
+                    <td className="px-4 py-3 text-[var(--color-text-muted)]"><WebsiteCell advertiser={a} /></td>
                   </tr>
                 ))}
               </tbody>

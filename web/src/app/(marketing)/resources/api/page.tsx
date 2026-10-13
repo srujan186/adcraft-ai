@@ -26,7 +26,7 @@ const ENDPOINTS: Endpoint[] = [
     summary:
       "The full pipeline. Scrapes the URL, writes a script, synthesises narration, mixes music and renders an MP4. This is what the web app calls.",
     body: `{
-  "url": "stripe.com",
+  "url": "nimbusgoods.example",
   "ad_style": "modern",
   "duration": 15
 }`,
@@ -47,7 +47,7 @@ const ENDPOINTS: Endpoint[] = [
     summary:
       "Scrape and write a script, but stop before rendering. Useful for reviewing or storing copy without paying the cost of a render.",
     body: `{
-  "url": "stripe.com",
+  "url": "nimbusgoods.example",
   "ad_style": "bold",
   "duration": 30
 }`,
@@ -90,15 +90,15 @@ const ENDPOINTS: Endpoint[] = [
     method: "POST",
     path: "/api/scrape",
     summary: "Extract branding from a URL without generating anything.",
-    body: `{ "url": "stripe.com" }`,
+    body: `{ "url": "nimbusgoods.example" }`,
     response: `{
-  "business_name": "Stripe",
+  "business_name": "Nimbus Goods",
   "description":   "...",
   "tagline":       "...",
   "logo_url":      "https://...",
   "colors": { "primary": "#635bff", "secondary": "#ffffff", "accent": "#0a2540" },
   "features": [],
-  "domain": "stripe.com",
+  "domain": "nimbusgoods.example",
   "scrape_failed": false
 }`,
     note: "If the site blocks scraping, scrape_failed is true and scrape_message explains why — the request still returns 200 with fallback data.",

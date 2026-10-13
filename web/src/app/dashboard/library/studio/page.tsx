@@ -58,6 +58,7 @@ export default function StudioPage() {
   });
 
   const noAdv = advertisers.length === 0;
+  const selectedAdv = advertisers.find((x) => String(x.id) === form.advertiser_id) ?? advertisers[0];
   const working = job && (job.status === "pending" || job.status === "processing");
 
   return (
@@ -68,12 +69,20 @@ export default function StudioPage() {
           {noAdv && <p className="rounded-[var(--radius-md)] bg-[var(--color-warning-50)] px-4 py-2 text-sm text-[var(--color-warning)]">Add an advertiser first.</p>}
           <div className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card)]">
             <Field label="Advertiser" htmlFor="s-adv">
-              <Select id="s-adv" value={form.advertiser_id} onChange={(e) => setForm({ ...form, advertiser_id: e.target.value })}>
+              <Select id="s-adv" value={form.advertiser_id} onChange={(e) => {
+                const a = advertisers.find((x) => String(x.id) === e.target.value);
+                setForm({ ...form, advertiser_id: e.target.value, url: a?.website_url ?? "" });
+              }}>
                 {advertisers.map((a) => <option key={String(a.id)} value={String(a.id)}>{a.name}</option>)}
               </Select>
             </Field>
             <Field label="Business URL" htmlFor="s-url">
-              <Input id="s-url" placeholder="https://your-site.com (or leave blank)" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+              <Input id="s-url" placeholder={selectedAdv?.website_url ?? "https://yourbusiness.com (or leave blank)"} value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                {selectedAdv?.website_url
+                  ? `Ads can only be made from ${selectedAdv.name}'s own website (any page on it).`
+                  : "Add this advertiser's website in Settings → Advertisers to generate from a URL."}
+              </p>
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Length" htmlFor="s-dur">

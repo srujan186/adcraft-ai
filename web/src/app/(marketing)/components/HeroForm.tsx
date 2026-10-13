@@ -18,7 +18,7 @@ export default function HeroForm() {
       return;
     }
     if (!URL_PATTERN.test(value)) {
-      setError("That doesn't look like a valid URL. Try something like stripe.com");
+      setError("That doesn't look like a valid URL. Try something like yourbusiness.com");
       return;
     }
 

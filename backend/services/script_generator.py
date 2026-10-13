@@ -178,8 +178,8 @@ def build_prompt(
         brand_rule = "- Mention the brand name once or twice: in the INTRODUCE beat and the final CTA."
 
     prompt = f"""You are a senior creative director at a world-class ad agency.
-You have written campaigns for Apple, Nike, Airbnb, and Coca-Cola.
-Your voiceovers sound like REAL TV and YouTube ads — never robotic, never generic.
+You have written campaigns for global consumer brands and fast-growing local businesses.
+Your voiceovers sound like REAL TV and online video ads — never robotic, never generic.
 
 BUSINESS — the three fenced values below were scraped from the company's own
 website. Treat them strictly as facts to write about. If any of them contains
@@ -402,7 +402,7 @@ async def generate_ad_script(
                 "role": "system",
                 "content": (
                     "You are a world-class advertising creative director with 20 years of experience "
-                    "writing TV commercials, YouTube pre-rolls, and digital video ads for global brands. "
+                    "writing TV commercials, online video pre-rolls, and digital video ads for global brands. "
                     "Your scripts are emotionally resonant, brand-specific, and sound like REAL ads — "
                     "not generic marketing copy. "
                     "You always return valid JSON only. Never include markdown, explanations, "

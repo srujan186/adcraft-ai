@@ -18,7 +18,7 @@ from urllib.parse import urljoin, urlparse
 def clean_url(url: str) -> str:
     """
     Make sure URL has https:// prefix.
-    Handles: apple.com, www.apple.com, https://apple.com
+    Handles: brand.example, www.brand.example, https://brand.example
     """
     url = url.strip()
     if not url.startswith(('http://', 'https://')):
@@ -29,8 +29,8 @@ def clean_url(url: str) -> str:
 def make_absolute(url: str, base_url: str) -> str:
     """
     Convert relative URLs to absolute URLs.
-    /logo.png + https://apple.com → https://apple.com/logo.png
-    //cdn.apple.com/logo.png     → https://cdn.apple.com/logo.png
+    /logo.png + https://brand.example → https://brand.example/logo.png
+    //cdn.brand.example/logo.png → https://cdn.brand.example/logo.png
     """
     if not url:
         return ""
@@ -85,7 +85,7 @@ def is_neutral_color(color: str) -> bool:
     Returns True if color is a mid-range gray.
     We skip these when looking for brand colors.
     NOTE: We allow pure black and pure white —
-    brands like Apple and Nike use these intentionally.
+    some large brands use these intentionally.
     """
     if not color.startswith('#') or len(color) < 7:
         return True
@@ -1251,7 +1251,7 @@ def is_unreachable(error: str) -> bool:
 
 
 def www_variant(url: str) -> str:
-    """`https://nike.in` -> `https://www.nike.in`, or "" if not applicable.
+    """`https://brand.example` -> `https://www.brand.example`, or "" if not applicable.
 
     Plenty of sites only answer on the www host: the apex either has no A
     record or refuses the connection. Users type the bare domain, so without

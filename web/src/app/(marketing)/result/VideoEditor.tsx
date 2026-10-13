@@ -915,7 +915,7 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
           <div className="ve-panel-body">
             <VeField label="Company Name" id="ve-banner-company">
               <input id="ve-banner-company" className="ve-input" value={banner.companyName}
-                placeholder="Nike, Inc."
+                placeholder="Your Company, Inc."
                 onChange={(e) => setBanner("companyName", e.target.value)} />
             </VeField>
             <VeField label="Phone Number" id="ve-banner-phone">
@@ -925,12 +925,12 @@ export default function VideoEditor({ result, videoSrc, onBack, onDownload }: Pr
             </VeField>
             <VeField label="Email" id="ve-banner-email">
               <input id="ve-banner-email" className="ve-input" type="email" value={banner.email}
-                placeholder="hello@nike.com"
+                placeholder="hello@yourcompany.com"
                 onChange={(e) => setBanner("email", e.target.value)} />
             </VeField>
             <VeField label="Website" id="ve-banner-website">
               <input id="ve-banner-website" className="ve-input" value={banner.website}
-                placeholder="nike.com"
+                placeholder="yourcompany.com"
                 onChange={(e) => setBanner("website", e.target.value)} />
             </VeField>
             <VeField label="Address" id="ve-banner-address">

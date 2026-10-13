@@ -57,3 +57,19 @@ stack and marked `staging: pending`.
   keys); `web/e2e/settings-unfinished.spec.ts` (no menu link shows "building in"; six URLs → 404; key
   create → shown once → used → last used → revoke → 401). Backend scope/last-used tests failed before.
 - Decisions recorded in `docs/DECISIONS.md`. Staging: pending.
+
+### P0-7 Branding and names — fixed (code); data cleanup in P0-9
+- Root cause: real brands used as examples in customer-facing copy (URL hints "stripe.com", the API docs
+  example business "Stripe", video-editor end-card placeholders "Nike, Inc."), in the ad-writer prompt
+  ("You have written campaigns for Apple, Nike, Airbnb, and Coca-Cola" — a fabricated claim that could
+  steer generated ads toward real brands) and in code comments. Studio would generate an ad from any URL.
+- Fix: neutral examples (reserved `.example` domains, "Your Company"), brand-neutral prompt and comments.
+  API and seed data were already clean (no matches). Studio: `DOMAIN_MISMATCH` / `WEBSITE_REQUIRED` gate on
+  job creation; the Studio page prefills the advertiser's own website and explains the rule; advertisers
+  without a website can add one inline (Settings → Advertisers).
+- Tests: `api/tests/test_studio_domain.py` (own site + subdomains allowed; other sites, look-alike
+  prefix/suffix, missing website refused; business-name-only allowed) — refusals failed before;
+  `web/e2e/studio-own-site.spec.ts`. Repo scan (api, seed, playbook, web, backend services/routers):
+  only functional identifiers remain — see `docs/DECISIONS.md`.
+- Note: `backend/` (video generator) prompt changed → needs a push to the HF Space when deploying.
+- Staging: pending.

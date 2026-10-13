@@ -9,7 +9,7 @@ async def scrape_url(request: ScrapeRequest):
     """
     POST /api/scrape
     
-    Accepts: { "url": "apple.com" }
+    Accepts: { "url": "brand.example" }
     Returns: brand information extracted from the URL
     """
 

@@ -42,7 +42,7 @@ export default function GenerateForm() {
 
     if (!value) { setError("Please enter a URL"); return; }
     if (!URL_PATTERN.test(value)) {
-      setError("That doesn't look like a valid URL. Try something like stripe.com");
+      setError("That doesn't look like a valid URL. Try something like yourbusiness.com");
       return;
     }
 
@@ -110,7 +110,7 @@ export default function GenerateForm() {
             id="url-input"
             className="input"
             type="text"
-            placeholder="e.g. stripe.com or https://example.com"
+            placeholder="e.g. yourbusiness.com or https://yourbusiness.com"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={loading}
