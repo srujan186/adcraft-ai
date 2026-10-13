@@ -71,7 +71,7 @@ export default function InsightsOverviewPage() {
 
       <div className="px-8 py-8">
         {!hasData ? (
-          <EmptyState title="No data available for the selected dates" description="Publish a campaign for this advertiser and run the simulator." />
+          <EmptyState title="No data available for the selected dates" description="Insights appear here once a campaign for this advertiser is live and delivering." />
         ) : (
           <div className="grid gap-6 lg:grid-cols-2">
             <Card title="Geographic (by state)">

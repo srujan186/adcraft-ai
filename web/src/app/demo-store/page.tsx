@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
 import { getAccessToken, getAccountId } from "@/lib/auth";
 import { API_URL } from "@/lib/utils";
@@ -27,7 +26,7 @@ export default function DemoStorePage() {
   const { data: households = [] } = useQuery({
     queryKey: ["dev-households"],
     queryFn: async () => {
-      const { data } = await api.GET("/api/v1/dev/households");
+      const { data } = await api.GET("/api/v1/dev/households"); // 404 in production → no picker
       return (data as HH[]) ?? [];
     },
   });
@@ -59,22 +58,28 @@ export default function DemoStorePage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg-subtle)]">
-      {/* dev toolbar */}
+      {/* test toolbar — the household picker exists only in development (the list is a dev endpoint) */}
       <div className="flex flex-wrap items-center gap-3 bg-[var(--color-nav)] px-4 py-2 text-xs text-[var(--color-nav-text)]">
-        <span className="font-semibold">DEV</span>
-        <span>Simulate visitor from household:</span>
-        <select
-          value={hh}
-          onChange={(e) => setHh(e.target.value)}
-          className="rounded bg-white/10 px-2 py-1 text-white"
-        >
-          <option value="">— anonymous —</option>
-          {households.map((h) => (
-            <option key={h.id} value={h.id} className="text-black">
-              {h.city}, {h.state} · {h.age_bucket} · {h.interests.join("/")}
-            </option>
-          ))}
-        </select>
+        <span className="font-semibold">Test store</span>
+        {households.length > 0 ? (
+          <>
+            <span>Visit as test household:</span>
+            <select
+              value={hh}
+              onChange={(e) => setHh(e.target.value)}
+              className="rounded bg-white/10 px-2 py-1 text-white"
+            >
+              <option value="">— anonymous —</option>
+              {households.map((h) => (
+                <option key={h.id} value={h.id} className="text-black">
+                  {h.city}, {h.state} · {h.age_bucket} · {h.interests.join("/")}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <span>Browsing this store sends test events to your pixel, so you can check your setup.</span>
+        )}
         <span className="ml-auto">{pixel ? `pixel ${pixel.public_key.slice(0, 10)}…` : "no pixel"}</span>
       </div>
 

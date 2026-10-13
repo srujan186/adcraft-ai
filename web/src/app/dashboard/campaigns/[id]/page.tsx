@@ -134,7 +134,7 @@ export default function CampaignDetailPage() {
           {ts && ts.some((p) => p.value > 0) ? (
             <TrendChart points={ts} format={fmt} />
           ) : (
-            <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">No delivery yet — run the simulator.</p>
+            <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">No delivery yet. Results appear here once your campaign is live and delivering.</p>
           )}
         </div>
 

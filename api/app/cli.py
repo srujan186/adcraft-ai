@@ -279,12 +279,43 @@ def main() -> None:
     sub.add_parser("seed")
     sim = sub.add_parser("simulate")
     sim.add_argument("--hours", type=int, default=24)
+    demo = sub.add_parser("seed-demo", help="create (or replace) the populated 'Demo Co' account")
+    demo.add_argument("--email", default=None, help="login email (default demo@adcraft-demo.com)")
+    demo.add_argument("--password", default=None, help="login password (random if omitted; printed once)")
+    demo.add_argument("--days", type=int, default=30, help="days of delivery history to backfill")
+    demo.add_argument("--no-media", action="store_true", help="skip rendering creative videos (no ffmpeg)")
+    tick = sub.add_parser("tick", help="run one delivery tick (what DELIVERY_LOOP does every few minutes)")
+    tick.set_defaults()
     args = parser.parse_args()
 
     if args.cmd == "seed":
         asyncio.run(seed())
     elif args.cmd == "simulate":
         asyncio.run(simulate(args.hours))
+    elif args.cmd == "seed-demo":
+        asyncio.run(_seed_demo(args))
+    elif args.cmd == "tick":
+        asyncio.run(_tick())
+
+
+async def _seed_demo(args) -> None:
+    from app.core.db import SessionLocal
+    from app.services.demo import DEMO_EMAIL, seed_demo
+
+    async with SessionLocal() as db:
+        r = await seed_demo(db, email=args.email or DEMO_EMAIL, password=args.password, days=args.days,
+                            make_media=not args.no_media)
+    print(f"[seed-demo] Demo Co ready: {r['campaigns']} campaigns, {r['days']} days, "
+          f"{r['impressions']:,} impressions, {r['recommendations']} recommendations")
+    print(f"[seed-demo] log in with  {r['email']}  /  {r['password']}")
+
+
+async def _tick() -> None:
+    from app.core.db import SessionLocal
+    from app.services import delivery
+
+    async with SessionLocal() as db:
+        print(f"[tick] {await delivery.tick(db)}")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 import random
+import uuid
 
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,7 +104,10 @@ async def simulate_strategy(db: AsyncSession, campaign: Campaign, strategy: Stra
     target_spend = min(target_spend, max(0, account.balance_micros))
     if target_spend <= 0 or avg_cpm <= 0:
         return 0, 0
-    n_imps = int(target_spend / avg_cpm * 1000)
+    exact = target_spend / avg_cpm * 1000
+    # Short delivery ticks need fractions of an impression; round stochastically so they add up
+    # (flooring lost ~25% of spend at 5-minute ticks).
+    n_imps = int(exact) + (1 if rng.random() < exact - int(exact) else 0)
 
     fc = strategy.frequency_cap or {}
     per_day = fc.get("impressions") if fc else None
@@ -177,13 +181,23 @@ async def simulate_strategy(db: AsyncSession, campaign: Campaign, strategy: Stra
     return served, spend
 
 
-async def simulate_all(db: AsyncSession, hours: int) -> dict:
-    rng = random.Random(42)
-    campaigns = (
-        await db.execute(
-            select(Campaign).where(Campaign.status.in_([CampaignStatus.learning, CampaignStatus.delivering]))
-        )
-    ).scalars().all()
+async def simulate_all(
+    db: AsyncSession,
+    hours: float,
+    *,
+    rng: random.Random | None = None,
+    account_id: uuid.UUID | None = None,
+) -> dict:
+    """Deliver `hours` of activity ending now for every live campaign (or one account's).
+
+    `rng` defaults to a fixed seed so batch runs and tests are reproducible; the continuous
+    delivery loop passes a fresh one, otherwise every tick would replay identical randomness.
+    """
+    rng = rng or random.Random(42)
+    q = select(Campaign).where(Campaign.status.in_([CampaignStatus.learning, CampaignStatus.delivering]))
+    if account_id is not None:
+        q = q.where(Campaign.account_id == account_id)
+    campaigns = (await db.execute(q)).scalars().all()
     total_imps = total_spend = 0
     for c in campaigns:
         account = await db.get(Account, c.account_id)

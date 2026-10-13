@@ -19,10 +19,18 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.config import settings
 
 
+async def delivery_tick() -> None:
+    """Same tick the API runs when DELIVERY_LOOP=true; the advisory lock stops both running at once."""
+    from app.core.db import SessionLocal
+    from app.services import delivery
+
+    async with SessionLocal() as db:
+        print(f"[scheduler] delivery tick: {await delivery.tick(db)}")
+
+
 def build_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
-    # Jobs are added in later milestones, e.g.:
-    # scheduler.add_job(enqueue_simulate_tick, "interval", minutes=1)
+    scheduler.add_job(delivery_tick, "interval", seconds=settings.delivery_tick_seconds)
     return scheduler
 
 

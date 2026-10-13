@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { CreativeThumb } from "@/components/app/CreativeMedia";
 import { StatusPill } from "@/components/app/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -606,10 +607,7 @@ function CreativesCard({ strat, patch }: { strat: Strategy; patch: (p: Partial<S
                 }}
                 className={`flex w-full items-center gap-3 rounded-[var(--radius-md)] border px-3 py-2 text-left text-sm ${on ? "border-[var(--color-primary)] bg-[var(--color-primary-50)]" : "border-[var(--color-border)]"}`}
               >
-                {c.thumbnail_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.thumbnail_url} alt={c.name} className="h-8 w-14 rounded object-cover" />
-                )}
+                <CreativeThumb src={c.thumbnail_url} alt={c.name} className="h-8 w-14 rounded object-cover" />
                 <span className="font-medium text-[var(--color-text)]">{c.name}</span>
               </button>
             );

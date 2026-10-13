@@ -2,73 +2,55 @@
 
 Additive metrics (impressions, spend, sessions, leads, purchases, installs, revenue)
 SUM correctly across rows; household reach (distinct) is queried directly where needed.
+
+Set-based: two INSERT … SELECT statements run inside Postgres. The previous version built every
+aggregate row as an ORM object in Python, which was too slow to run on every delivery tick.
 """
 from __future__ import annotations
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.campaign import Campaign
-from app.models.inventory import Household
-from app.models.measurement import Conversion, Impression, StatsDaily
+# Impression aggregates (state via household join).
+_IMPRESSIONS = text(
+    """
+    INSERT INTO stats_daily (date, account_id, advertiser_id, campaign_id, strategy_id, creative_id,
+                             channel_id, state, impressions, households_reached, spend_micros,
+                             sessions, leads, purchases, installs, revenue_micros)
+    SELECT CAST(i.ts AS DATE), i.account_id, i.advertiser_id, i.campaign_id, i.strategy_id, i.creative_id,
+           i.channel_id, h.state, COUNT(*), COUNT(DISTINCT i.household_id), COALESCE(SUM(i.cost_micros), 0),
+           0, 0, 0, 0, 0
+    FROM impressions i
+    JOIN households h ON h.id = i.household_id
+    GROUP BY CAST(i.ts AS DATE), i.account_id, i.advertiser_id, i.campaign_id, i.strategy_id,
+             i.creative_id, i.channel_id, h.state
+    """
+)
+
+# Conversion aggregates — separate rows so additive metrics still SUM correctly.
+_CONVERSIONS = text(
+    """
+    INSERT INTO stats_daily (date, account_id, advertiser_id, campaign_id, strategy_id, creative_id,
+                             channel_id, state, impressions, households_reached, spend_micros,
+                             sessions, leads, purchases, installs, revenue_micros)
+    SELECT CAST(cv.ts AS DATE), cv.account_id, camp.advertiser_id, cv.campaign_id, cv.strategy_id,
+           cv.creative_id, cv.channel_id, h.state, 0, 0, 0,
+           SUM(CASE WHEN cv.event = 'session'  THEN 1 ELSE 0 END),
+           SUM(CASE WHEN cv.event = 'lead'     THEN 1 ELSE 0 END),
+           SUM(CASE WHEN cv.event = 'purchase' THEN 1 ELSE 0 END),
+           SUM(CASE WHEN cv.event = 'install'  THEN 1 ELSE 0 END),
+           COALESCE(SUM(cv.revenue_micros), 0)
+    FROM conversions cv
+    JOIN campaigns camp ON camp.id = cv.campaign_id
+    LEFT JOIN households h ON h.id = cv.household_id
+    GROUP BY CAST(cv.ts AS DATE), cv.account_id, camp.advertiser_id, cv.campaign_id, cv.strategy_id,
+             cv.creative_id, cv.channel_id, cv.event, h.state
+    """
+)
 
 
 async def rebuild_rollups(db: AsyncSession) -> None:
-    await db.execute(delete(StatsDaily))
-
-    # impression aggregates (state via household join)
-    imp_q = (
-        select(
-            func.date(Impression.ts).label("date"),
-            Impression.account_id, Impression.advertiser_id, Impression.campaign_id,
-            Impression.strategy_id, Impression.creative_id, Impression.channel_id, Household.state,
-            func.count().label("impressions"),
-            func.count(func.distinct(Impression.household_id)).label("households_reached"),
-            func.sum(Impression.cost_micros).label("spend_micros"),
-        )
-        .join(Household, Household.id == Impression.household_id)
-        .group_by(
-            func.date(Impression.ts), Impression.account_id, Impression.advertiser_id, Impression.campaign_id,
-            Impression.strategy_id, Impression.creative_id, Impression.channel_id, Household.state,
-        )
-    )
-    for r in (await db.execute(imp_q)).all():
-        db.add(StatsDaily(
-            date=r.date, account_id=r.account_id, advertiser_id=r.advertiser_id, campaign_id=r.campaign_id,
-            strategy_id=r.strategy_id, creative_id=r.creative_id, channel_id=r.channel_id, state=r.state,
-            impressions=r.impressions, households_reached=r.households_reached, spend_micros=r.spend_micros or 0,
-        ))
-
-    # conversion aggregates (separate rows; additive metrics SUM correctly)
-    conv_q = (
-        select(
-            func.date(Conversion.ts).label("date"),
-            Conversion.account_id, Conversion.campaign_id, Conversion.strategy_id,
-            Conversion.creative_id, Conversion.channel_id, Conversion.event, Household.state,
-            func.count().label("n"), func.sum(Conversion.revenue_micros).label("revenue"),
-        )
-        .join(Household, Household.id == Conversion.household_id, isouter=True)
-        .group_by(
-            func.date(Conversion.ts), Conversion.account_id, Conversion.campaign_id, Conversion.strategy_id,
-            Conversion.creative_id, Conversion.channel_id, Conversion.event, Household.state,
-        )
-    )
-    adv_cache: dict = {}
-    for r in (await db.execute(conv_q)).all():
-        adv = adv_cache.get(r.campaign_id)
-        if adv is None:
-            camp = await db.get(Campaign, r.campaign_id)
-            adv = camp.advertiser_id if camp else None
-            adv_cache[r.campaign_id] = adv
-        row = StatsDaily(
-            date=r.date, account_id=r.account_id, advertiser_id=adv, campaign_id=r.campaign_id,
-            strategy_id=r.strategy_id, creative_id=r.creative_id, channel_id=r.channel_id, state=r.state,
-            revenue_micros=r.revenue or 0,
-            sessions=r.n if r.event == "session" else 0,
-            leads=r.n if r.event == "lead" else 0,
-            purchases=r.n if r.event == "purchase" else 0,
-            installs=r.n if r.event == "install" else 0,
-        )
-        db.add(row)
-
+    await db.execute(text("DELETE FROM stats_daily"))
+    await db.execute(_IMPRESSIONS)
+    await db.execute(_CONVERSIONS)
     await db.commit()

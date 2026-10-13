@@ -99,7 +99,7 @@ export default function ReportsPage() {
             </div>
           ) : rows.length === 0 ? (
             <div className="grid place-items-center rounded-[var(--radius-lg)] border border-[var(--color-border)] py-24 text-sm text-[var(--color-text-muted)]">
-              No data for the selected dates. Publish a campaign and run the simulator.
+              No data for the selected dates. Results appear once a campaign is live and delivering.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)]">

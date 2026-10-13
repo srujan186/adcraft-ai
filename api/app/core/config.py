@@ -84,8 +84,23 @@ class Settings(BaseSettings):
     # LLM (optional — agent is disabled with a friendly message when absent)
     anthropic_api_key: str | None = None
 
-    # Simulator: 1 real minute == SIM_SPEED simulated minutes (60 => 1 min = 1 sim hour)
-    sim_speed: int = 60
+    # Delivery (stand-in for a live ad server). SIM_SPEED = simulated minutes per real minute.
+    # 1 (default) keeps spend and dates realistic: a $50/day strategy spends ~$50 per real day.
+    # 60 (1 real minute = 1 simulated hour) is faster but inflates per-day numbers 60x.
+    sim_speed: float = 1.0
+    # Run the delivery loop inside the API process (free hosts have no separate worker).
+    delivery_loop: bool = False
+    delivery_tick_seconds: int = 300
+    # A server that slept catches up at most this many hours of delivery on its next tick.
+    delivery_max_catchup_hours: float = 48.0
+    # Admin tools (simulate history, reset the demo account): off unless ALLOW_SIMULATION=true,
+    # and only for users whose email is in ADMIN_EMAILS (comma-separated). Everyone else gets 404.
+    allow_simulation: bool = False
+    admin_emails: str = ""
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
 
     # Creative Studio renderer:
     #   "simple"    — self-contained ffmpeg caption renderer (no external service)

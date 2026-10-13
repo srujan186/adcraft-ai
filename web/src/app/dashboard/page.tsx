@@ -92,7 +92,7 @@ export default function DashboardPage() {
             {hasData ? (
               <TrendChart points={ts!} format={fmt} />
             ) : (
-              <EmptyState title="No campaign delivering yet" description="Create and publish a campaign, then run the simulator to see trends." />
+              <EmptyState title="No campaign delivering yet" description="Create and publish a campaign — trends appear here once it starts delivering." />
             )}
           </div>
 

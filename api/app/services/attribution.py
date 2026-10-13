@@ -1,72 +1,60 @@
-"""Attribution engine (docs/08): last-touch view-through within the attribution window."""
+"""Attribution engine (docs/08): last-touch view-through within the attribution window.
+
+Set-based: one INSERT … SELECT credits every not-yet-attributed event in the database instead
+of loading all events and querying per event in Python (that made each delivery tick take tens
+of seconds on a small instance). Semantics are unchanged — see tests/test_attribution_sql.py,
+which compares this against the original per-event implementation.
+
+For each event from a known household with a mapped type (page_view→session, lead, purchase,
+install) that has no conversion yet:
+  1. look back the advertiser's *longest* campaign window (720 h if it has no campaigns);
+  2. take the household's latest impression from that advertiser in that span (at or before the event);
+  3. credit it only if the event is also inside *that* campaign's own window.
+"""
 from __future__ import annotations
 
-import datetime as dt
-
-from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.campaign import Campaign
-from app.models.measurement import Conversion, Impression
-from app.models.tracking import Event
 
 EVENT_TO_CONVERSION = {"page_view": "session", "lead": "lead", "purchase": "purchase", "install": "install"}
 DEFAULT_WINDOW_HOURS = 720
 
+_ATTRIBUTE = text(
+    """
+    INSERT INTO conversions (event_id, impression_id, account_id, campaign_id, strategy_id, creative_id,
+                             channel_id, household_id, ts, event, revenue_micros, lag_seconds, model)
+    SELECT e.id, imp.id, imp.account_id, imp.campaign_id, imp.strategy_id, imp.creative_id,
+           imp.channel_id, e.household_id, e.ts,
+           CASE e.event WHEN 'page_view' THEN 'session' ELSE e.event END,
+           COALESCE(e.revenue_micros, 0),
+           CAST(FLOOR(EXTRACT(EPOCH FROM (e.ts - imp.ts))) AS INTEGER),  -- truncate, like int(seconds)
+           'last_touch'
+    FROM events e
+    CROSS JOIN LATERAL (
+        SELECT COALESCE(MAX(c.attribution_window_hours), :default_window) AS hours
+        FROM campaigns c WHERE c.advertiser_id = e.advertiser_id
+    ) win
+    JOIN LATERAL (
+        SELECT i.id, i.ts, i.account_id, i.campaign_id, i.strategy_id, i.creative_id, i.channel_id
+        FROM impressions i
+        WHERE i.household_id = e.household_id
+          AND i.advertiser_id = e.advertiser_id
+          AND i.ts <= e.ts
+          AND i.ts >= e.ts - make_interval(hours => win.hours)
+        ORDER BY i.ts DESC
+        LIMIT 1
+    ) imp ON TRUE
+    JOIN campaigns camp ON camp.id = imp.campaign_id
+    WHERE e.household_id IS NOT NULL
+      AND e.event IN ('page_view', 'lead', 'purchase', 'install')
+      AND NOT EXISTS (SELECT 1 FROM conversions cv WHERE cv.event_id = e.id)
+      AND e.ts - imp.ts <= make_interval(hours => camp.attribution_window_hours)
+    """
+)
+
 
 async def run_attribution(db: AsyncSession) -> int:
-    """Attribute not-yet-attributed events to their last preceding impression."""
-    attributed = set((await db.execute(select(Conversion.event_id).where(Conversion.event_id.isnot(None)))).scalars().all())
-    events = (
-        await db.execute(select(Event).where(Event.household_id.isnot(None)).order_by(Event.ts))
-    ).scalars().all()
-
-    # cache per-advertiser max window
-    win_cache: dict = {}
-    count = 0
-    for e in events:
-        if e.id in attributed:
-            continue
-        conv_event = EVENT_TO_CONVERSION.get(e.event)
-        if conv_event is None:
-            continue
-
-        win_h = win_cache.get(e.advertiser_id)
-        if win_h is None:
-            rows = (
-                await db.execute(select(Campaign.attribution_window_hours).where(Campaign.advertiser_id == e.advertiser_id))
-            ).scalars().all()
-            win_h = max(rows) if rows else DEFAULT_WINDOW_HOURS
-            win_cache[e.advertiser_id] = win_h
-
-        lo = e.ts - dt.timedelta(hours=win_h)
-        imp = (
-            await db.execute(
-                select(Impression)
-                .where(
-                    Impression.household_id == e.household_id,
-                    Impression.advertiser_id == e.advertiser_id,
-                    Impression.ts <= e.ts,
-                    Impression.ts >= lo,
-                )
-                .order_by(Impression.ts.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if imp is None:
-            continue
-
-        camp = await db.get(Campaign, imp.campaign_id)
-        if camp and (e.ts - imp.ts) > dt.timedelta(hours=camp.attribution_window_hours):
-            continue
-
-        db.add(Conversion(
-            event_id=e.id, impression_id=imp.id, account_id=imp.account_id, campaign_id=imp.campaign_id,
-            strategy_id=imp.strategy_id, creative_id=imp.creative_id, channel_id=imp.channel_id,
-            household_id=e.household_id, ts=e.ts, event=conv_event, revenue_micros=e.revenue_micros,
-            lag_seconds=int((e.ts - imp.ts).total_seconds()), model="last_touch",
-        ))
-        count += 1
-
+    """Attribute not-yet-attributed events to their last preceding impression. Returns the count."""
+    result = await db.execute(_ATTRIBUTE, {"default_window": DEFAULT_WINDOW_HOURS})
     await db.commit()
-    return count
+    return result.rowcount or 0

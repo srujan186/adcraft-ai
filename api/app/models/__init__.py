@@ -24,6 +24,7 @@ from app.models.campaign import (
     StrategyStatus,
 )
 from app.models.creative import Creative, CreativeSource, ReviewStatus
+from app.models.delivery import SimClock
 from app.models.identity import Account, ApiKey, Invitation, Membership, OAuthApp, Role, User
 from app.models.intelligence import (
     Elasticity,
@@ -77,6 +78,7 @@ __all__ = [
     "Kpi",
     "PlacementMode",
     "ReviewStatus",
+    "SimClock",
     "Strategy",
     "StrategyCreative",
     "StrategyStatus",

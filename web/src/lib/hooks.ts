@@ -63,3 +63,17 @@ export async function logout(): Promise<void> {
   clearSession();
   if (typeof window !== "undefined") window.location.href = "/login";
 }
+
+
+/** Platform-admin status, or an error (404) for everyone who isn't an admin. */
+export function useAdminStatus() {
+  return useQuery({
+    queryKey: ["admin-status"],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/admin/status");
+      if (error) throw error;
+      return data as { simulation: boolean; delivery_loop: boolean; sim_speed: number; tick_seconds: number };
+    },
+    staleTime: 5 * 60_000,
+  });
+}

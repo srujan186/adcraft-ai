@@ -37,3 +37,30 @@ export async function createAdvertiser(page: Page, s: Session, name = "Nimbus Go
   if (!r.ok()) throw new Error(`advertiser failed: ${r.status()} ${await r.text()}`);
   return (await r.json()).id;
 }
+
+/** Log in as a fixed account, creating it the first time (for allow-listed admin emails). */
+export async function signedInAs(page: Page, email: string, password = "password123"): Promise<Session> {
+  let r = await page.request.post(`${API}/api/v1/auth/login`, { data: { email, password } });
+  if (r.status() === 401) {
+    r = await page.request.post(`${API}/api/v1/auth/signup`, {
+      data: { email, password, full_name: "E2E Admin", company: "E2E Co" },
+    });
+  }
+  if (!r.ok()) throw new Error(`login failed: ${r.status()} ${await r.text()}`);
+  const d = await r.json();
+  const s: Session = {
+    token: d.access_token,
+    accountId: String(d.account_id),
+    headers: { Authorization: `Bearer ${d.access_token}`, "X-Account-Id": String(d.account_id) },
+  };
+  await page.goto("/login");
+  await page.evaluate(
+    ([t, a, rt]) => {
+      localStorage.setItem("lumen_access", t);
+      localStorage.setItem("lumen_account_id", a);
+      if (rt) localStorage.setItem("lumen_refresh", rt);
+    },
+    [s.token, s.accountId, d.refresh_token ?? ""],
+  );
+  return s;
+}

@@ -32,14 +32,15 @@ TestSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=Asy
 # closed raises "Event loop is closed". Re-point every background-task module at the
 # NullPool test session so bg work runs against the test DB on the current loop.
 import app.services.audiences as _audiences  # noqa: E402
+import app.services.delivery as _delivery  # noqa: E402
 import app.services.creative_processing as _creative_processing  # noqa: E402
 import app.services.simulator as _simulator  # noqa: E402
 import app.services.studio as _studio  # noqa: E402
 
-for _m in (_audiences, _creative_processing, _simulator, _studio):
+for _m in (_audiences, _creative_processing, _delivery, _simulator, _studio):
     _m.SessionLocal = TestSessionLocal
 
-_TABLES = "users, accounts, memberships, invitations, api_keys, oauth_apps, advertisers, households, channels, interest_segments, geos, companies, company_households, creatives, campaigns, strategies, strategy_creatives, pixels, pixel_event_types, apps, events, audiences, audience_members, transactions, payment_methods, invoices, coupons, coupon_redemptions, holdout_households, impressions, conversions, stats_daily, report_definitions, recommendations, recommendation_suppressions, elasticities, agent_threads, agent_messages, agent_proposals, studio_jobs"
+_TABLES = "users, accounts, memberships, invitations, api_keys, oauth_apps, advertisers, households, channels, interest_segments, geos, companies, company_households, creatives, campaigns, strategies, strategy_creatives, pixels, pixel_event_types, apps, events, audiences, audience_members, transactions, payment_methods, invoices, coupons, coupon_redemptions, holdout_households, impressions, conversions, stats_daily, report_definitions, recommendations, recommendation_suppressions, elasticities, agent_threads, agent_messages, agent_proposals, studio_jobs, sim_clock"
 
 
 async def _ensure_db_and_schema() -> None:

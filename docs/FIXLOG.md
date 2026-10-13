@@ -92,3 +92,52 @@ stack and marked `staging: pending`.
 - **Owner action:** keep the API awake — UptimeRobot (free) HTTP monitor on
   `https://<api>/api/v1/health` every 5 min, or a paid instance. Code cannot prevent the free tier sleeping.
 - Staging: pending.
+
+### P0-1 Nothing ever delivers on the deployed app — fixed
+- Root causes: (1) the simulator only ran from a developer CLI; the scheduler that should have ticked it was a
+  stub. (2) Nothing ever advanced campaign status — publishing set Scheduled/Learning and campaigns stayed
+  there forever (scheduled ones never started). (3) Attribution loaded every event and queried per event;
+  rollups built every row in Python — far too slow to run continuously on a small instance. (4) Empty
+  states told customers to "run the simulator".
+- Fix:
+  - `services/delivery.py`: each tick delivers the real time elapsed since the last tick × `SIM_SPEED`,
+    catches up after the host slept (capped), advisory-locked; runs in the API when `DELIVERY_LOOP=true`
+    (and in the compose scheduler). `sim_clock` table records the last tick.
+  - `services/lifecycle.py`: Scheduled → Learning on the start date, Learning → Delivering when
+    `learning_until` passes, → Completed after every strategy's end date.
+  - Attribution and rollups are single SQL statements (10× faster locally on 40k impressions; identical
+    output — equivalence tests keep the original implementations as references). New indexes for them.
+  - Simulator: optional account scope and RNG; stochastic rounding so 5-minute ticks don't lose ~25% of spend.
+  - `seed-demo` CLI + `services/demo.py`: "Demo Co" / Nimbus Goods (fictional, `nimbusgoods.example`),
+    verified pixel, 3 rendered creatives, 3 campaigns published through the real publish path (Sales with
+    prospecting + retargeting strategies, Traffic, Awareness), 30 days of history, statuses advanced,
+    recommendations generated. Re-running replaces the account (incl. tables without FKs).
+  - Admin page `/dashboard/admin` + `/api/v1/admin/*` (simulate N days for own account, reset demo),
+    gated by `ALLOW_SIMULATION` + `ADMIN_EMAILS`; "Admin" appears in the account menu only for admins.
+  - No customer-facing "simulator" copy; the pixel test store explains itself in production.
+  - Library and wizard degrade gracefully when a creative's media file is gone (ephemeral host disk).
+- Tests: `test_delivery.py` (real-time spend ≈ budget, catch-up cap, no double delivery, speed, lock,
+  lifecycle), `test_attribution_sql.py` (equal to original attribution + rollups incl. edge cases),
+  `test_demo.py` (every screen non-zero as the demo user; re-seed leaves no orphans), `test_admin.py`
+  (hidden when off / from non-admins; own-account only; bounds), `web/e2e/admin.spec.ts`.
+- Real-stack check (local, full catalogue): `seed-demo` in 31 s → 3 campaigns, 30 days, 464,448
+  impressions, 4 recommendations. Logged in as the demo user: dashboard trend (~$387/day), all 3
+  campaigns Delivering, campaign metrics, Insights (geo, inventory, demographics, interests, creative),
+  Forecaster and recommendations all populated.
+- Observed, not changed (outside P0 or needs your call): Sales ROAS 0.46× comes from the simulator's
+  base conversion rates — realistic-looking but may read as "losing money" to a client (tuning is Phase 4
+  valuation work); two recommendations both say "All channels — Entire US" (cards should name the
+  campaign — Phase 3); "Last 7 days" ends on today's partial day, so the line drops at the end;
+  the Forecaster curve is stair-stepped because projections round to 0.1 (Phase 4 forecaster).
+- **Owner action (production):** on the API service set `DELIVERY_LOOP=true`; for admin tools set
+  `ALLOW_SIMULATION=true` and `ADMIN_EMAILS=<your email>`; then run `seed-demo` (CLI against Neon, or
+  Admin → Reset demo account). Staging: pending.
+
+### P0-7 addendum — seeded channel names imitated real brands — fixed
+- Found while checking the demo's Insights: "Pluto Free TV", "Spectrum Cable Apps", "Discovery Bros
+  Network", "Magic Kingdom+", "SportsCenter Live" (a real show name), "StreamMax Originals" and others.
+  The first P0-7 scan used exact words and missed near-names.
+- Fix: 10 channels renamed to invented names in `seed/channels.json`; Alembic migration `b3e5f7a9c1d2`
+  renames them in place in existing databases (ids kept — verified on the local DB).
+- Test: `api/tests/test_seed_brands.py` checks seeded channel names and the filler word lists against a
+  list of real media brands (failed on the old names).

@@ -2,10 +2,11 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Film, Sparkles, Upload, X } from "lucide-react";
+import { Sparkles, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
+import { CreativeThumb, CreativeVideo } from "@/components/app/CreativeMedia";
 import { EmptyState } from "@/components/app/EmptyState";
 import { PageHeader } from "@/components/app/PageHeader";
 import { StatusPill } from "@/components/app/StatusPill";
@@ -169,12 +170,7 @@ export default function LibraryPage() {
                         onClick={() => c.video_url && setPreview(c)}
                         className="relative grid h-12 w-20 place-items-center overflow-hidden rounded-[var(--radius-sm)] bg-slate-100"
                       >
-                        {c.thumbnail_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={c.thumbnail_url} alt={c.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <Film className="h-5 w-5 text-slate-400" />
-                        )}
+                        <CreativeThumb src={c.thumbnail_url} alt={c.name} className="h-full w-full object-cover" />
                       </button>
                     </td>
                     <td className="px-4 py-3">
@@ -207,7 +203,7 @@ export default function LibraryPage() {
               <X className="h-4 w-4" />
             </Dialog.Close>
             {preview?.video_url && (
-              <video src={preview.video_url} controls autoPlay className="w-full rounded-[var(--radius-lg)]" />
+              <CreativeVideo key={preview.id} src={preview.video_url} className="w-full rounded-[var(--radius-lg)]" />
             )}
           </Dialog.Content>
         </Dialog.Portal>

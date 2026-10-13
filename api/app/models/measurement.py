@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Identity, Integer, String, func
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Identity, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,8 @@ from app.models.base import Base
 
 class Impression(Base):
     __tablename__ = "impressions"
+    # set-based attribution: a household's latest impression from an advertiser
+    __table_args__ = (Index("ix_impressions_hh_adv_ts", "household_id", "advertiser_id", "ts"),)
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     ts: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -33,7 +35,7 @@ class Conversion(Base):
     __tablename__ = "conversions"
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    event_id: Mapped[int | None] = mapped_column(BigInteger)
+    event_id: Mapped[int | None] = mapped_column(BigInteger, index=True)  # "already credited?" lookups
     impression_id: Mapped[int | None] = mapped_column(BigInteger)
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     campaign_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)

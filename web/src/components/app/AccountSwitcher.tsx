@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { logout, useMe } from "@/lib/hooks";
+import { logout, useAdminStatus, useMe } from "@/lib/hooks";
 
 const MENU: { label: string; href: string }[] = [
   { label: "Settings", href: "/dashboard/settings/general" },
@@ -16,6 +16,8 @@ const MENU: { label: string; href: string }[] = [
 
 export function AccountSwitcher() {
   const { data: me } = useMe();
+  const { data: admin } = useAdminStatus();
+  const menu = admin ? [...MENU, { label: "Admin", href: "/dashboard/admin" }] : MENU;
   // Until the real account arrives show a skeleton — never a made-up name like "Your account".
   if (!me?.active_account?.name) {
     return (
@@ -52,7 +54,7 @@ export function AccountSwitcher() {
             {me?.email && <p className="text-xs text-[var(--color-text-muted)]">{me.email}</p>}
           </div>
           <DropdownMenu.Separator className="my-1 h-px bg-[var(--color-border)]" />
-          {MENU.map((m) => (
+          {menu.map((m) => (
             <DropdownMenu.Item key={m.href} asChild>
               <Link
                 href={m.href}

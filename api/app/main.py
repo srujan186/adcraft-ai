@@ -5,6 +5,9 @@ REST resources are mounted under /api/v1 (see docs/03-api-spec.md).
 """
 from __future__ import annotations
 
+import asyncio
+import logging
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -14,6 +17,7 @@ from app.core.deps import require_non_production
 from app.core.errors import UnhandledErrorMiddleware, install_error_handlers
 from app.routers import (
     accounts,
+    admin,
     advertisers,
     agent,
     audiences,
@@ -72,6 +76,7 @@ API_PREFIX = "/api/v1"
 
 # Resource routers (grows per milestone)
 app.include_router(health.router, prefix=API_PREFIX)
+app.include_router(admin.router, prefix=API_PREFIX)
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(accounts.router, prefix=API_PREFIX)
 app.include_router(members.router, prefix=API_PREFIX)
@@ -91,6 +96,39 @@ app.include_router(recommendations.router, prefix=API_PREFIX)
 app.include_router(agent.router, prefix=API_PREFIX)
 app.include_router(studio.router, prefix=API_PREFIX)
 app.include_router(track_public.router)  # /px.js, /e, /mmp at root
+
+
+_delivery_task: asyncio.Task | None = None
+
+
+async def _delivery_loop() -> None:
+    """Run delivery ticks forever (DELIVERY_LOOP=true). Free hosts have no separate worker
+    process, so the API runs it; the advisory lock in delivery.tick keeps it to one at a time."""
+    from app.core.db import SessionLocal
+    from app.services import delivery
+
+    log = logging.getLogger("app.delivery")
+    while True:
+        try:
+            async with SessionLocal() as db:
+                result = await delivery.tick(db)
+            log.info("delivery tick: %s", result)
+        except Exception:  # noqa: BLE001 — a bad tick must not kill the loop
+            log.exception("delivery tick failed")
+        await asyncio.sleep(settings.delivery_tick_seconds)
+
+
+@app.on_event("startup")
+async def _start_delivery_loop() -> None:
+    global _delivery_task
+    if settings.delivery_loop:
+        _delivery_task = asyncio.create_task(_delivery_loop())
+
+
+@app.on_event("shutdown")
+async def _stop_delivery_loop() -> None:
+    if _delivery_task:
+        _delivery_task.cancel()
 
 
 @app.on_event("startup")
