@@ -286,6 +286,10 @@ def main() -> None:
     demo.add_argument("--no-media", action="store_true", help="skip rendering creative videos (no ffmpeg)")
     tick = sub.add_parser("tick", help="run one delivery tick (what DELIVERY_LOOP does every few minutes)")
     tick.set_defaults()
+    clean = sub.add_parser("cleanup", help="list (or, with --apply, delete) every account except the demo account")
+    clean.add_argument("--keep", action="append", default=[], metavar="EMAIL",
+                       help="also keep the accounts this user belongs to (repeatable; ADMIN_EMAILS are always kept)")
+    clean.add_argument("--apply", action="store_true", help="actually delete (default is a dry run)")
     args = parser.parse_args()
 
     if args.cmd == "seed":
@@ -296,6 +300,8 @@ def main() -> None:
         asyncio.run(_seed_demo(args))
     elif args.cmd == "tick":
         asyncio.run(_tick())
+    elif args.cmd == "cleanup":
+        asyncio.run(_cleanup(args))
 
 
 async def _seed_demo(args) -> None:
@@ -316,6 +322,29 @@ async def _tick() -> None:
 
     async with SessionLocal() as db:
         print(f"[tick] {await delivery.tick(db)}")
+
+
+async def _cleanup(args) -> None:
+    from app.core.config import settings
+    from app.core.db import SessionLocal
+    from app.services.cleanup import cleanup
+
+    async with SessionLocal() as db:
+        r = await cleanup(db, keep_emails=set(args.keep) | settings.admin_email_set, apply=args.apply)
+    for label, rows in (("KEEP", r["keep"]), ("DELETE", r["delete"])):
+        print(f"[cleanup] {label} {len(rows)} account(s)")
+        for a in rows:
+            print(f"  {a['name']}  ({', '.join(a['members']) or 'no members'})  created {a['created_at'][:10]}")
+            if a["advertisers"]:
+                print(f"    advertisers: {', '.join(a['advertisers'])}")
+            if a["campaigns"]:
+                print(f"    campaigns:   {', '.join(a['campaigns'])}")
+    if r.get("error"):
+        print(f"[cleanup] {r['error']}")
+    elif r["applied"]:
+        print(f"[cleanup] deleted {len(r['delete'])} account(s).")
+    else:
+        print("[cleanup] dry run - nothing deleted. Re-run with --apply to delete the accounts above.")
 
 
 if __name__ == "__main__":

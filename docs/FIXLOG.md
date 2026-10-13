@@ -174,3 +174,18 @@ stack and marked `staging: pending`.
   calls cost money. **Owner action:** set `ANTHROPIC_API_KEY` on the API service (optional
   `ANTHROPIC_MODEL`, `AGENT_EFFORT`), redeploy (new dependency), then on staging ask the plan's draft
   "what audience should I target?" and "what is my max CPM and is it too low?".
+
+### P0-9 — demo environment full of test data — command ready, production run is yours
+- Cause: production shares one database with every test sign-up (e.g. the "Claude audit (test)"
+  draft in "simple.co", the "vibe" advertiser). Nothing removed them.
+- Fix: `python -m app.cli cleanup` lists every account as KEEP or DELETE with members, advertisers
+  and campaigns, and deletes nothing. `--apply` deletes the DELETE accounts and every row they own
+  (incl. tables without FKs: impressions, conversions, stats_daily, elasticities), then users left
+  with no account. Kept: the demo account, accounts of `ADMIN_EMAILS` users, and `--keep EMAIL`.
+  It refuses to run if the demo account doesn't exist yet. `seed-demo` now uses the same purge.
+- Tests: `api/tests/test_cleanup.py` (dry run changes nothing; apply leaves only kept accounts and no
+  orphan rows; refuses without a demo account); `test_demo.py` still passes on the shared purge.
+- Local dry run: KEEP 3, DELETE 119 (all e2e sign-ups).
+- **Owner action:** run `seed-demo` on production first, then
+  `python -m app.cli cleanup` with `DATABASE_URL` pointed at Neon, read the list, and re-run with
+  `--apply`. Taking a Neon branch/snapshot first makes it undoable.

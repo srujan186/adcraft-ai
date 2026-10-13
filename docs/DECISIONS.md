@@ -19,3 +19,4 @@ Where the fix plan was silent, the simplest option was taken and recorded here
 2026-10-13 — Ask Agent uses `claude-opus-5-5` at `medium` effort, non-streaming (the panel takes one JSON reply). `AGENT_EFFORT=low` trades depth for speed if replies feel slow.
 2026-10-13 — When the agent can't reach the LLM, it shows the "unavailable" notice and help links rather than any templated advice — a template can't see the account, and the old one stated facts that were false for most users.
 2026-10-13 — Agent proposals are limited to budget, max CPM, bidding mode and duplicating a strategy; anything else gets pointed to the right screen. `apply` enforces the same allow-list server-side.
+2026-10-13 — Demo clean-up deletes whole accounts, not individual campaigns: test data lives in test sign-ups, and partial deletes leave half-configured accounts. It is a CLI that reports by default; we don't run destructive commands against production — the owner runs `--apply`.

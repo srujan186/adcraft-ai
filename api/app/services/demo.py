@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.models.advertiser import Advertiser, Industry
 from app.models.audience import Audience
-from app.models.base import Base
 from app.models.billing import TxnType
 from app.models.campaign import (
     BudgetType,
@@ -36,6 +35,7 @@ from app.models.identity import Account, Membership, Role, User
 from app.models.tracking import Event, EventSource, InstallMethod, PixelEventType, PixelStatus
 from app.services import lifecycle, recommender
 from app.services.billing import adjust_balance
+from app.services.cleanup import purge_account
 from app.services.publish import LEARNING_DAYS, publish_campaign
 from app.services.simulator import simulate_all
 from app.services.tracking import create_pixel
@@ -67,12 +67,7 @@ async def _delete_existing(db: AsyncSession, email: str) -> None:
         return
     account_ids = (await db.execute(select(Membership.account_id).where(Membership.user_id == user.id))).scalars().all()
     for account_id in account_ids:
-        # High-volume tables (impressions, conversions, stats_daily, …) carry account_id without a
-        # foreign key, so cascading from accounts would orphan them: clear every account_id table.
-        for table in reversed(Base.metadata.sorted_tables):
-            if "account_id" in table.c and table.name != "accounts":
-                await db.execute(delete(table).where(table.c.account_id == account_id))
-        await db.execute(delete(Account).where(Account.id == account_id))
+        await purge_account(db, account_id)
     await db.execute(delete(User).where(User.id == user.id))
     await db.commit()
 
