@@ -62,6 +62,13 @@ class Settings(BaseSettings):
 
     # Auth
     jwt_secret: str = "dev-insecure-change-me"
+    # Argon2id cost. OWASP's recommended minimum (m=19 MiB, t=2, p=1) instead of the
+    # argon2-cffi defaults (64 MiB, t=3, p=4): ~5x less work. On a 0.1-CPU free host the
+    # defaults made each login take ~4.5 s. Existing hashes keep verifying (params are
+    # stored in the hash) and are upgraded on the next successful login.
+    argon2_time_cost: int = 2
+    argon2_memory_kib: int = 19456
+    argon2_parallelism: int = 1
     jwt_access_ttl_minutes: int = 15
     jwt_refresh_ttl_days: int = 30
 

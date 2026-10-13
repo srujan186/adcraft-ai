@@ -10,7 +10,11 @@ from argon2.exceptions import VerifyMismatchError
 
 from app.core.config import settings
 
-_ph = PasswordHasher()
+_ph = PasswordHasher(
+    time_cost=settings.argon2_time_cost,
+    memory_cost=settings.argon2_memory_kib,
+    parallelism=settings.argon2_parallelism,
+)
 ALGO = "HS256"
 
 
@@ -25,6 +29,14 @@ def verify_password(password: str, password_hash: str) -> bool:
     except VerifyMismatchError:
         return False
     except Exception:  # malformed hash etc.
+        return False
+
+
+def password_needs_rehash(password_hash: str) -> bool:
+    """True when the hash was made with different cost settings than the current ones."""
+    try:
+        return _ph.check_needs_rehash(password_hash)
+    except Exception:
         return False
 
 

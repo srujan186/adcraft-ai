@@ -1,6 +1,7 @@
 """Auth & session: signup, login, refresh, logout, me."""
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 
 import jwt
@@ -18,6 +19,7 @@ from app.core.security import (
     create_refresh_token,
     decode_token,
     hash_password,
+    password_needs_rehash,
     verify_password,
 )
 from app.models.identity import Account, Membership, Role, User
@@ -70,7 +72,7 @@ async def signup(body: SignupRequest, response: Response, db: AsyncSession = Dep
     if existing is not None:
         raise AppError("EMAIL_TAKEN", "An account with this email already exists", 409)
 
-    user = User(email=body.email.lower(), password_hash=hash_password(body.password), full_name=body.full_name)
+    user = User(email=body.email.lower(), password_hash=await asyncio.to_thread(hash_password, body.password), full_name=body.full_name)
     db.add(user)
     await db.flush()
 
@@ -91,8 +93,12 @@ async def signup(body: SignupRequest, response: Response, db: AsyncSession = Dep
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     user = (await db.execute(select(User).where(User.email == body.email.lower()))).scalar_one_or_none()
-    if user is None or not verify_password(body.password, user.password_hash):
+    # argon2 is CPU-bound by design: run it off the event loop so one login can't stall
+    # every other request on a small instance.
+    if user is None or not await asyncio.to_thread(verify_password, body.password, user.password_hash):
         raise AppError("INVALID_CREDENTIALS", "Email or password is incorrect", 401)
+    if password_needs_rehash(user.password_hash):
+        user.password_hash = await asyncio.to_thread(hash_password, body.password)
 
     user.last_login_at = dt.datetime.now(dt.timezone.utc)
     account_id = await _first_account_id(db, user.id)
