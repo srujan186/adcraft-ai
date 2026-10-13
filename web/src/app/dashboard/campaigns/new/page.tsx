@@ -15,7 +15,8 @@ import { type Advertiser, errorMessage } from "@/lib/hooks";
 export default function NewCampaignPage() {
   const router = useRouter();
   const [advertiserId, setAdvertiserId] = useState("");
-  const [name, setName] = useState("Untitled campaign");
+  // Empty value + placeholder: a prefilled value made typing append ("Untitled campaignSpring Sale").
+  const [name, setName] = useState("");
   const [goal, setGoal] = useState("traffic");
   const [kpi, setKpi] = useState("cps");
   const [busy, setBusy] = useState(false);
@@ -43,7 +44,7 @@ export default function NewCampaignPage() {
     const { data, error } = await api.POST("/api/v1/campaigns", {
       body: {
         advertiser_id: (advertiserId || advertisers[0]?.id || "") as string,
-        name,
+        name: name.trim() || "Untitled campaign",
         goal: goal as never,
         kpi: kpi as never,
       },
@@ -84,7 +85,7 @@ export default function NewCampaignPage() {
             </Select>
           </Field>
           <Field label="Campaign name" htmlFor="c-name">
-            <Input id="c-name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input id="c-name" value={name} placeholder="Untitled campaign" onChange={(e) => setName(e.target.value)} />
           </Field>
         </div>
 

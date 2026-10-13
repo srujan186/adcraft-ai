@@ -30,3 +30,7 @@ api/var/
 # Python bytecode (was accidentally committed with the platform; untracked here).
 __pycache__/
 *.pyc
+
+# Playwright (web/e2e) output
+web/test-results/
+web/playwright-report/

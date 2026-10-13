@@ -17,3 +17,12 @@ stack and marked `staging: pending`.
   docker-compose and the test suite set `ENV=development`.
 - Tests: `tests/test_prod_guards.py` — 404 in production, 200 in development, default is production.
 - Staging: pending. **Production needs nothing set** (default is production).
+
+### P0-8 Campaign name shown twice — fixed
+- Root cause: the create page initialised the name field with the *value* "Untitled campaign", so
+  clicking in and typing appended to it ("Untitled campaignClaude audit (test)").
+- Fix: empty value + `placeholder="Untitled campaign"`; the API receives `name.trim() || "Untitled campaign"`.
+- Tests: `web/e2e/campaign-name.spec.ts` (new Playwright suite, `pnpm e2e`) — typing "Spring Sale"
+  gives exactly "Spring Sale" in the wizard header and the campaigns list; blank falls back.
+  Failed before the fix with `You are creating… / Untitled campaignSpring Sale`.
+- Existing bad names in production data are cleaned in P0-9. Staging: pending.
