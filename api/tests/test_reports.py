@@ -66,3 +66,14 @@ def test_incrementality_not_eligible(client):
     inc = client.get(f"/api/v1/insights/incrementality?advertiser_id={adv}", headers=h).json()
     assert inc["eligible"] is False
     assert set(inc["checks"].keys()) == {"days", "spend", "conversions", "holdout"}
+
+
+def test_insights_overview_does_not_crash(client):
+    """The demographics/interests queries joined Household to itself (select from Household,
+    join Household), which SQLAlchemy can't compile — the endpoint 500'd for every advertiser."""
+    h = signup(client, "ins@acme.io", "Acme")["headers"]
+    adv = client.post("/api/v1/advertisers", headers=h, json={
+        "name": "Nimbus", "industry": "ecommerce", "timezone": "America/New_York"}).json()["id"]
+    r = client.get(f"/api/v1/insights/overview?advertiser_id={adv}", headers=h)
+    assert r.status_code == 200, r.text
+    assert set(r.json()) >= {"geo", "inventory", "creative", "demographics", "time", "interests"}

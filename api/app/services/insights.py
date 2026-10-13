@@ -52,6 +52,7 @@ async def overview(db: AsyncSession, account_id: uuid.UUID, advertiser_id: uuid.
     demo_rows = (
         await db.execute(
             select(Household.age_bucket, Household.gender, func.count())
+            .select_from(Impression)
             .join(Household, Household.id == Impression.household_id)
             .where(Impression.advertiser_id == advertiser_id)
             .group_by(Household.age_bucket, Household.gender)
@@ -71,6 +72,7 @@ async def overview(db: AsyncSession, account_id: uuid.UUID, advertiser_id: uuid.
     interest_rows = (
         await db.execute(
             select(func.unnest(Household.interests).label("interest"), func.count())
+            .select_from(Impression)
             .join(Household, Household.id == Impression.household_id)
             .where(Impression.advertiser_id == advertiser_id)
             .group_by("interest").order_by(func.count().desc()).limit(15)
