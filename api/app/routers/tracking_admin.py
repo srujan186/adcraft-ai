@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.deps import Tenant, get_current_account, require_roles
+from app.core.deps import Tenant, get_current_account, require_non_production, require_roles
 from app.core.errors import AppError
 from app.models.advertiser import Advertiser
 from app.models.identity import Role
@@ -120,7 +120,7 @@ async def create_app(body: AppCreate, tenant: Tenant = Depends(_EDIT), db: Async
     return o
 
 
-@router.get("/dev/households")
+@router.get("/dev/households", dependencies=[Depends(require_non_production)])
 async def dev_households(tenant: Tenant = Depends(get_current_account), db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(select(Household).order_by(func.random()).limit(8))).scalars().all()
     return [

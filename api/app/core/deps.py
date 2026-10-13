@@ -110,3 +110,12 @@ def require_roles(*roles: Role):
         return tenant
 
     return _dep
+
+
+def require_non_production() -> None:
+    """Gate for developer-only routes and API docs: a plain 404 in production, so their
+    existence isn't advertised."""
+    from app.core.config import settings
+
+    if settings.is_production:
+        raise AppError("NOT_FOUND", "Not found", 404)

@@ -6,6 +6,8 @@ from __future__ import annotations
 import asyncio
 import os
 
+os.environ.setdefault("ENV", "development")  # before app import: tests exercise dev routes/docs
+
 import asyncpg
 import pytest
 from fastapi.testclient import TestClient

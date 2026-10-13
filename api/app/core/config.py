@@ -21,6 +21,11 @@ class Settings(BaseSettings):
 
     # Core infra. Host ports are 5433/6380 (remapped in docker-compose to dodge a
     # local Postgres/Redis). In docker these are overridden to postgres:5432 / redis:6379.
+    # "production" hides developer endpoints (/api/v1/dev/*) and the API docs. It is the
+    # default so a deploy that forgets to set ENV fails closed; local dev and tests set
+    # ENV=development.
+    env: str = "production"
+
     database_url: str = "postgresql+asyncpg://lumen:lumen@localhost:5433/lumen"
     redis_url: str = "redis://localhost:6380/0"
 
@@ -36,6 +41,10 @@ class Settings(BaseSettings):
         if ssl and ssl != "disable" and not any(k == "ssl" for k, _ in q):
             q.append(("ssl", "require"))
         return _with_query(v, "postgresql+asyncpg", q)
+
+    @property
+    def is_production(self) -> bool:
+        return self.env.strip().lower() not in {"development", "dev", "local", "test"}
 
     @property
     def asyncpg_dsn(self) -> str:

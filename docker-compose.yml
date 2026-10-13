@@ -44,6 +44,7 @@ services:
     build: ./api
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
+      ENV: development
       DATABASE_URL: postgresql+asyncpg://lumen:lumen@postgres:5432/lumen
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: http://minio:9000

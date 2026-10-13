@@ -5,10 +5,12 @@ REST resources are mounted under /api/v1 (see docs/03-api-spec.md).
 """
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
 
 from app.core.config import settings
+from app.core.deps import require_non_production
 from app.core.errors import install_error_handlers
 from app.routers import (
     accounts,
@@ -37,7 +39,21 @@ app = FastAPI(
     title=f"{settings.product_name} API",
     version="0.1.0",
     description="Self-serve Connected-TV advertising platform.",
+    # Docs are served by the guarded routes below (404 in production), not FastAPI's defaults.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
+
+
+@app.get("/openapi.json", include_in_schema=False, dependencies=[Depends(require_non_production)])
+async def openapi_json():
+    return app.openapi()
+
+
+@app.get("/docs", include_in_schema=False, dependencies=[Depends(require_non_production)])
+async def swagger_ui():
+    return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{settings.product_name} API")
 
 app.add_middleware(
     CORSMiddleware,
