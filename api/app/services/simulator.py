@@ -25,6 +25,7 @@ from app.models.tracking import Event, EventSource
 from app.services.billing import adjust_balance
 from app.services.estimator import GOAL_MULTIPLIER, _eligible_sample  # noqa: F401 (reuse goal mult)
 from app.services import attribution, rollups
+from app.services.audiences import refresh_web_audiences
 
 BASE_VISIT_RATE = {
     "awareness": 0.002, "traffic": 0.004, "leads": 0.004, "sales": 0.004,
@@ -208,6 +209,7 @@ async def simulate_all(
             imps, spend = await simulate_strategy(db, c, s, account, hours, rng)
             total_imps += imps
             total_spend += spend
+    await refresh_web_audiences(db, account_id)
     n_conv = await attribution.run_attribution(db)
     await rollups.rebuild_rollups(db)
     return {"campaigns": len(campaigns), "impressions": total_imps, "spend_micros": total_spend, "conversions": n_conv}

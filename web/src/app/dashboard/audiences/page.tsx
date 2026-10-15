@@ -95,7 +95,7 @@ export default function AudiencesPage() {
                   <tr key={String(a.id)} className="border-t border-[var(--color-border)]">
                     <td className="px-4 py-3 font-medium text-[var(--color-text)]">{a.name}</td>
                     <td className="px-4 py-3 text-[var(--color-text-muted)]">{a.source.replace(/_/g, " ")}</td>
-                    <td className="px-4 py-3"><StatusPill status={a.status === "ready" ? "delivering" : a.status === "no_data" ? "draft" : "processing"} /></td>
+                    <td className="px-4 py-3"><StatusPill status={a.status} /></td>
                     <td className="px-4 py-3 tabular-nums text-[var(--color-text-muted)]">{a.match_rate != null ? pct(a.match_rate) : "—"}</td>
                     <td className="px-4 py-3 tabular-nums text-[var(--color-text-muted)]">{nfCompact.format(a.matched_households)}</td>
                   </tr>

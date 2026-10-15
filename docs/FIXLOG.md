@@ -219,3 +219,19 @@ stack and marked `staging: pending`.
   misplaced key routed to Groq. 110 API tests pass.
 - **Owner action:** on Render set `GROQ_API_KEY` (move the key out of `ANTHROPIC_API_KEY`), then push
   and redeploy the branch; the re-check needs the new build.
+
+### Live smoke test after deploy (2026-10-15) — web audiences were empty in the demo — fixed
+- Live check as the demo user on https://adcraft-ai-xbog.vercel.app: login, dashboard, campaigns,
+  Sales campaign (Delivering), Insights, audiences, library, reports, API keys, marketing home all
+  load with data and no 5xx; unfinished settings pages 404; the agent answered from live data via Groq.
+- Found: Visitors/Leads/Purchasers showed 0 households (and the status pill said "Delivering").
+  Households joined web audiences only through the live pixel endpoint; the simulator (demo seed and
+  delivery loop) inserts events directly, so the demo's "Retargeting — Site visitors" strategy sat
+  next to empty audiences, and the agent correctly said there was nothing to retarget.
+- Fix: `services/audiences.refresh_web_audiences` (set-based, idempotent INSERT … ON CONFLICT +
+  count) runs after every delivery pass. Audience status pills show Ready / Counting / No data yet.
+- Local re-seed: Visitors 1,574, Purchasers 20, Leads 0 (the demo has no leads campaign).
+- Tests: `api/tests/test_web_audiences.py`. 113 API tests pass.
+- Observed, not changed: the simulator ignores a strategy's included audiences when picking
+  households, so "Retargeting — Site visitors" reaches random households (Phase 2, data integrity).
+- After deploy, the delivery loop's next tick fills the production demo audiences; no re-seed needed.

@@ -28,6 +28,11 @@ const STATUS: Record<string, { tone: Tone; label: string; pulse?: boolean }> = {
   approved: { tone: "success", label: "Approved" },
   rejected: { tone: "danger", label: "Rejected" },
   needs_changes: { tone: "warning", label: "Needs changes" },
+  // audiences
+  ready: { tone: "success", label: "Ready" },
+  counting: { tone: "info", label: "Counting", pulse: true },
+  no_data: { tone: "slate", label: "No data yet" },
+  error: { tone: "danger", label: "Error" },
 };
 
 export function StatusPill({ status }: { status: string }) {

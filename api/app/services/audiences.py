@@ -82,3 +82,32 @@ async def run_match(db: AsyncSession, aud: Audience) -> None:
         aud.status = AudienceStatus.ready if count > 0 or aud.source == AudienceSource.web_traffic else AudienceStatus.no_data
         aud.last_synced_at = dt.datetime.now(dt.timezone.utc)
         await db.commit()
+
+
+# Web-traffic audiences: the pixel endpoint adds a household as each event arrives, but
+# simulated delivery inserts events in bulk, so membership is also derived from the events
+# table. Set-based and idempotent; runs after every delivery pass.
+_WEB_MEMBERS = """
+    INSERT INTO audience_members (audience_id, household_id)
+    SELECT DISTINCT a.id, e.household_id
+    FROM audiences a
+    JOIN events e ON e.advertiser_id = a.advertiser_id AND e.household_id IS NOT NULL
+    WHERE a.source = 'web_traffic' AND a.archived_at IS NULL {scope}
+      AND e.event IN (SELECT jsonb_array_elements_text(a.definition -> 'events'))
+    ON CONFLICT DO NOTHING
+"""
+_WEB_COUNTS = """
+    UPDATE audiences a
+    SET matched_households = (SELECT COUNT(*) FROM audience_members m WHERE m.audience_id = a.id),
+        status = 'ready', last_synced_at = now()
+    WHERE a.source = 'web_traffic' AND a.archived_at IS NULL {scope}
+"""
+
+
+async def refresh_web_audiences(db: AsyncSession, account_id: uuid.UUID | None = None) -> None:
+    from sqlalchemy import text
+
+    scope, params = ("AND a.account_id = :acc", {"acc": account_id}) if account_id else ("", {})
+    await db.execute(text(_WEB_MEMBERS.format(scope=scope)), params)
+    await db.execute(text(_WEB_COUNTS.format(scope=scope)), params)
+    await db.commit()
