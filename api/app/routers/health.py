@@ -15,6 +15,7 @@ class HealthResponse(BaseModel):
     version: str
 
 
-@router.get("/health", response_model=HealthResponse, summary="API health + identity")
+# HEAD too: uptime monitors (UptimeRobot) send HEAD and count a 405 as down.
+@router.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse, summary="API health + identity")
 async def health() -> HealthResponse:
     return HealthResponse(status="ok", product=settings.product_name, version="0.1.0")

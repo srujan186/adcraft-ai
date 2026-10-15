@@ -133,7 +133,8 @@ _check_assets()
 
 
 # ── Health / root ─────────────────────────────────────────────────────────────
-@app.get("/api/health")
+# HEAD too: uptime monitors (UptimeRobot) send HEAD and count a 405 as down.
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health_check():
     return {"status": "ok", "message": "AdCraft AI is running 🚀"}
 

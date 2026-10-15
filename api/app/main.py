@@ -141,6 +141,6 @@ async def _ensure_storage() -> None:
         print(f"[startup] storage bucket init skipped: {e}")
 
 
-@app.get("/health", tags=["meta"], summary="Liveness probe (used by docker healthcheck)")
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["meta"], summary="Liveness probe (used by docker healthcheck)")
 async def root_health() -> dict[str, str]:
     return {"status": "ok"}
