@@ -7,7 +7,7 @@ import httpx
 import re
 import urllib.request
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 
 # ═══════════════════════════════════════════════════════
@@ -15,15 +15,52 @@ from urllib.parse import urljoin, urlparse
 # Small utility functions used by everything below
 # ═══════════════════════════════════════════════════════
 
+# Redirect wrappers people copy from search results and social feeds: host suffix → the
+# query parameters that carry the real destination. Scraping the wrapper reads an empty
+# redirect page ("loaded but had almost no readable content").
+_REDIRECT_PARAMS = {
+    "google.": ("adurl", "url", "q"),
+    "facebook.com": ("u",),
+    "bing.com": ("u", "url"),
+}
+_TRACKING_PARAMS = {"gclid", "gbraid", "wbraid", "dclid", "fbclid", "msclkid", "yclid", "_ga", "srsltid"}
+
+
+def _unwrap_redirect(url: str) -> str:
+    for _ in range(3):  # a wrapper can wrap another
+        p = urlparse(url)
+        host = p.netloc.lower()
+        keys = next((v for k, v in _REDIRECT_PARAMS.items() if k in host), None)
+        if not keys:
+            break
+        qs = parse_qs(p.query)
+        target = next((qs[k][0] for k in keys if qs.get(k, [""])[0].startswith(("http://", "https://"))), None)
+        if not target:
+            break
+        url = target
+    return url
+
+
+def _strip_tracking(url: str) -> str:
+    p = urlparse(url)
+    if not p.query:
+        return url
+    kept = [(k, v) for k, vs in parse_qs(p.query, keep_blank_values=True).items() for v in vs
+            if k.lower() not in _TRACKING_PARAMS and not k.lower().startswith(("utm_", "gad_"))]
+    return urlunparse(p._replace(query=urlencode(kept)))
+
+
 def clean_url(url: str) -> str:
     """
-    Make sure URL has https:// prefix.
-    Handles: brand.example, www.brand.example, https://brand.example
+    Make sure URL has https:// prefix, unwrap ad/search redirect links to the site they
+    point at, and drop ad-tracking parameters.
+    Handles: brand.example, www.brand.example, https://brand.example,
+             https://www.google.com/aclk?...&adurl=https://brand.example/
     """
     url = url.strip()
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
-    return url
+    return _strip_tracking(_unwrap_redirect(url))
 
 
 def make_absolute(url: str, base_url: str) -> str:
@@ -152,8 +189,9 @@ def explain_failure(url: str, reason: str) -> str:
         )
     if "too little" in low:
         return (
-            f"{domain} loaded but had almost no readable content. "
-            "If it's a single-page app, try linking a specific page instead of the homepage."
+            f"{domain} loaded but showed us almost no content. Many large sites block "
+            "automated visitors, and some only build their pages in the browser. "
+            "Try a specific page on the site (such as an about or product page), or a different website."
         )
     return (
         f"We couldn't read {domain} automatically. "
