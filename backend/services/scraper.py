@@ -199,17 +199,31 @@ def explain_failure(url: str, reason: str) -> str:
     )
 
 
+def is_dead_link(reason: str) -> bool:
+    """The address itself is wrong: no such host, nothing listening, or the page is gone.
+
+    Only these stop the pipeline. A site that answers but won't show its content to
+    automated visitors (bot walls, 403/429, near-empty pages) still gets an ad, built from
+    its name and stock footage — we don't try to get past the site's protection.
+    """
+    low = (reason or "").lower()
+    return is_unreachable(reason) or any(k in low for k in ("404", "410", "not found", "name_not_resolved"))
+
+
 def build_fallback_data(url: str, reason: str = "") -> dict:
     """
     When every scraping attempt fails, return sensible defaults.
     The app NEVER crashes — always returns something usable.
-    `scrape_failed` tells the caller this is placeholder data.
+    `scrape_failed` is set only for dead links (see is_dead_link); otherwise the ad is
+    made from this data and `scrape_limited` records that the site could not be read.
     """
     domain = urlparse(url).netloc.replace('www.', '')
-    name = domain.split('.')[0].title()
+    stem = domain.split('.')[0]
+    name = stem.upper() if len(stem) <= 3 else stem.replace('-', ' ').title()
+    dead = is_dead_link(reason)
     return {
         "business_name": name,
-        "description":   f"{name} - providing quality products and services.",
+        "description":   f"{name}, the business at {domain}.",
         "tagline":       f"Welcome to {name}",
         "logo_url":      "",
         "colors": {
@@ -222,7 +236,8 @@ def build_fallback_data(url: str, reason: str = "") -> dict:
         "site_intent":   "unknown",
         "domain":        domain,
         "url":           url,
-        "scrape_failed": True,
+        "scrape_failed": dead,
+        "scrape_limited": not dead,
         "scrape_message": explain_failure(url, reason),
     }
 
